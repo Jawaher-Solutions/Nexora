@@ -8,7 +8,7 @@ const envSchema = z.object({
   JWT_SECRET:               z.string().min(32),
   JWT_EXPIRES_IN:           z.string().default('15m'),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('30d'),
-  REDIS_URL:                z.string().default('redis://localhost:6379'),
+  REDIS_URL:                z.string().default('redis://localhost:6381'),
   CLOUDFLARE_R2_BUCKET:     z.string().min(1),
   CLOUDFLARE_R2_ENDPOINT:   z.string().url(),
   CLOUDFLARE_R2_ACCESS_KEY: z.string().min(1),

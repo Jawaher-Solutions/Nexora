@@ -25,6 +25,18 @@ export async function buildApp(): Promise<FastifyInstance> {
     timeWindow: '1 minute',
   });
 
+  app.get('/', async () => {
+    return {
+      name: 'Nexora Backend API',
+      status: 'running',
+      docs: {
+        health: '/health',
+        auth: '/api/v1/auth',
+      },
+      timestamp: new Date(),
+    };
+  });
+
   // Health check route
   app.get('/health', async () => {
     return { status: 'ok', timestamp: new Date() };
