@@ -264,16 +264,22 @@ Suggested commit format:
 [optional details]
 ```
 
-## 👨‍💻 Team
 
-- Hamed Mohamed Abdelalim (Backend and React Admin)
-- Akram Noor Aldeen (Flutter Mobile)
+## 👨‍💻 Geliştirici
 
-Contact:
+<div align="center">
 
-- JawaherTech@gmail.com
-- www.JawaherTech.com
+### **Hamed Mohamed Abdelalim KAMEL**
 
+Full-Stack Engineer (React & Node.js) | Application Security & QA
+
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/7amed3li)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/hamed-ali)
+[![Email](https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:hamed.m.abdelalim@gmail.com)
+
+</div>
+
+---
 ## 📄 License
 
 This project is licensed under the ISC License.
