@@ -1,15 +1,16 @@
 {
   "compilerOptions": {
+    "moduleResolution": "nodenext",
     "target": "ES2022",
-    "module": "commonjs",
+    "module": "nodenext",
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "types": ["vitest/globals"]
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*"],
   "files": ["src/types/fastify.d.ts"]
+  
 }

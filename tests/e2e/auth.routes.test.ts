@@ -128,6 +128,17 @@ describe('POST /api/v1/auth/* (E2E)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.accessToken).toBeTruthy();
     expect(res.body.data.refreshToken).toBeTruthy();
+
+    // Verify token rotation: original token should now be invalid
+    const secondRefresh = await request.post('/api/v1/auth/refresh').send({ refreshToken });
+    expect(secondRefresh.status).not.toBe(200);
+    expect(secondRefresh.body.success).toBe(false);
+  });
+
+  it('POST /api/v1/auth/refresh → 401 for invalid/expired token', async () => {
+    const res = await request.post('/api/v1/auth/refresh').send({ refreshToken: 'invalid-token' });
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
   });
 
   it('POST /logout → 200', async () => {
@@ -153,5 +164,10 @@ describe('POST /api/v1/auth/* (E2E)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+
+    // Verify revocation: subsequent refresh should fail
+    const refreshAfterLogout = await request.post('/api/v1/auth/refresh').send({ refreshToken });
+    expect(refreshAfterLogout.status).toBe(401);
+    expect(refreshAfterLogout.body.success).toBe(false);
   });
 });

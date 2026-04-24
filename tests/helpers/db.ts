@@ -25,6 +25,13 @@ export async function createTestUser(
   });
 }
 
+/**
+ * Creates a test video in the database.
+ * @param userId - The ID of the user who owns the video.
+ * @param overrides - Optional overrides for video fields. 
+ * Note: status defaults to 'APPROVED' for testing convenience in most suites.
+ * Use overrides.status to test upload or review flows.
+ */
 export async function createTestVideo(
   userId: string,
   overrides: Partial<{

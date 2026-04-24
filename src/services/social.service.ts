@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { NotFoundError, ConflictError, ForbiddenError, ValidationError } from '../utils/errors';
+import { createNotification } from './notification.service';
 
 export async function followUser(followerId: string, followeeId: string) {
   if (followerId === followeeId) {
@@ -16,14 +17,16 @@ export async function followUser(followerId: string, followeeId: string) {
       data: { followerId, followeeId },
     });
 
-    await prisma.notification.create({
-      data: {
-        userId: followeeId,
-        type: 'FOLLOW',
-        message: 'Someone started following you.',
-        referenceId: followerId,
-      },
-    });
+    try {
+      await createNotification(
+        followeeId,
+        'FOLLOW',
+        'Someone started following you.',
+        followerId
+      );
+    } catch (notifErr) {
+      console.error('Failed to create notification for follow:', notifErr);
+    }
 
     return follow;
   } catch (err: any) {
@@ -54,6 +57,9 @@ export async function addComment(userId: string, videoId: string, content: strin
   if (parentId) {
     const parent = await prisma.comment.findUnique({ where: { id: parentId } });
     if (!parent) throw new NotFoundError('Parent comment');
+    if (parent.videoId !== videoId) {
+      throw new ValidationError('Parent comment does not belong to the same video');
+    }
   }
 
   const comment = await prisma.comment.create({
@@ -61,14 +67,16 @@ export async function addComment(userId: string, videoId: string, content: strin
   });
 
   if (video.userId !== userId) {
-    await prisma.notification.create({
-      data: {
-        userId: video.userId,
-        type: 'COMMENT',
-        message: 'Someone commented on your video.',
-        referenceId: comment.id,
-      },
-    });
+    try {
+      await createNotification(
+        video.userId,
+        'COMMENT',
+        'Someone commented on your video.',
+        comment.id
+      );
+    } catch (notifErr) {
+      console.error('Failed to create notification for comment:', notifErr);
+    }
   }
 
   return comment;
@@ -85,9 +93,26 @@ export async function deleteComment(commentId: string, userId: string, userRole:
   await prisma.comment.delete({ where: { id: commentId } });
 }
 
-export async function getNotifications(userId: string) {
-  return prisma.notification.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-  });
+export async function getNotifications(userId: string, page = 1, take = 20) {
+  take = Math.min(take, 50); // enforce server-side cap
+  const skip = (page - 1) * take;
+  const [notifications, total] = await Promise.all([
+    prisma.notification.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    }),
+    prisma.notification.count({ where: { userId } })
+  ]);
+
+  return {
+    notifications,
+    pagination: {
+      total,
+      page,
+      take,
+      totalPages: Math.ceil(total / take),
+    },
+  };
 }

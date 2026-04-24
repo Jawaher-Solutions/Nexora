@@ -9,7 +9,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      include: ['src/services/**', 'src/utils/**', 'src/validators/**'],
+      include: ['src/services/**', 'src/utils/**', 'src/validators/**', 'src/routes/**', 'src/middleware/**'],
       exclude: ['src/lib/**', 'src/index.ts'],
       thresholds: { lines: 80, functions: 80, branches: 75 },
     },

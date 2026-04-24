@@ -7,6 +7,7 @@
 // We just need to fill in the shape here.
 
 import '@fastify/jwt';
+import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
@@ -14,6 +15,15 @@ declare module '@fastify/jwt' {
       userId: string;
       role: string;
     };
+    user: {
+      userId: string;
+      role: string;
+    };
+  }
+}
+
+declare module 'fastify' {
+  interface FastifyRequest {
     user: {
       userId: string;
       role: string;

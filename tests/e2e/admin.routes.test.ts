@@ -25,16 +25,21 @@ describe('Admin routes E2E', () => {
     await prisma.user.deleteMany();
   });
 
+  it('rejects unauthenticated requests to analytics', async () => {
+    const res = await request.get('/api/v1/admin/analytics');
+    expect(res.status).toBe(401);
+  });
+
   it('rejects access for normal users', async () => {
     const user = await createTestUser({ role: 'USER' });
-    const token = await generateTestToken(user.id, user.role);
+    const token = generateTestToken(user.id, user.role);
     const res = await request.get('/api/v1/admin/analytics').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('allows access for MODERATOR to analytics', async () => {
     const mod = await createTestUser({ role: 'MODERATOR' });
-    const token = await generateTestToken(mod.id, mod.role);
+    const token = generateTestToken(mod.id, mod.role);
     const res = await request.get('/api/v1/admin/analytics').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveProperty('totalUsers');
@@ -42,7 +47,7 @@ describe('Admin routes E2E', () => {
 
   it('allows access for ADMIN to analytics', async () => {
     const admin = await createTestUser({ role: 'ADMIN' });
-    const token = await generateTestToken(admin.id, admin.role);
+    const token = generateTestToken(admin.id, admin.role);
     const res = await request.get('/api/v1/admin/analytics').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveProperty('totalUsers');
@@ -53,10 +58,11 @@ describe('Admin routes E2E', () => {
     const owner = await createTestUser();
     await createTestVideo(owner.id, { status: 'PENDING_REVIEW' });
 
-    const token = await generateTestToken(mod.id, mod.role);
+    const token = generateTestToken(mod.id, mod.role);
     const res = await request.get('/api/v1/admin/queue').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.data.videos.length).toBe(1);
+    expect(res.body.data.videos.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.data.videos.some((v: any) => v.id === video.id)).toBe(true);
   });
 
   it('reviews a video', async () => {
@@ -64,7 +70,7 @@ describe('Admin routes E2E', () => {
     const owner = await createTestUser();
     const video = await createTestVideo(owner.id, { status: 'PENDING_REVIEW' });
 
-    const token = await generateTestToken(mod.id, mod.role);
+    const token = generateTestToken(mod.id, mod.role);
     const res = await request
       .post(`/api/v1/admin/videos/${video.id}/review`)
       .set('Authorization', `Bearer ${token}`)
@@ -77,7 +83,7 @@ describe('Admin routes E2E', () => {
   it('allows ADMIN to ban user', async () => {
     const admin = await createTestUser({ role: 'ADMIN' });
     const target = await createTestUser();
-    const token = await generateTestToken(admin.id, admin.role);
+    const token = generateTestToken(admin.id, admin.role);
 
     const res = await request
       .post(`/api/v1/admin/users/${target.id}/ban`)
@@ -90,7 +96,7 @@ describe('Admin routes E2E', () => {
   it('prevents MODERATOR from banning user', async () => {
     const mod = await createTestUser({ role: 'MODERATOR' });
     const target = await createTestUser();
-    const token = await generateTestToken(mod.id, mod.role);
+    const token = generateTestToken(mod.id, mod.role);
 
     const res = await request
       .post(`/api/v1/admin/users/${target.id}/ban`)

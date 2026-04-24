@@ -63,4 +63,29 @@ describe('auth validators', () => {
   it('loginSchema rejects missing password', () => {
     expect(() => loginSchema.parse({ email: 'user@example.com' } as any)).toThrow();
   });
+
+  it('registerSchema rejects missing publicKey', () => {
+    expect(() =>
+      registerSchema.parse({
+        username: 'username',
+        email: 'user@example.com',
+        password: 'Password123!',
+      } as any)
+    ).toThrow();
+  });
+
+  it('registerSchema rejects password longer than 128 chars', () => {
+    expect(() =>
+      registerSchema.parse({
+        username: 'username',
+        email: 'user@example.com',
+        password: 'a'.repeat(129),
+        publicKey: 'pk',
+      })
+    ).toThrow();
+  });
+
+  it('loginSchema rejects invalid email format', () => {
+    expect(() => loginSchema.parse({ email: 'not-an-email', password: 'x' })).toThrow();
+  });
 });

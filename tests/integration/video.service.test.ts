@@ -78,6 +78,8 @@ describe('video.service integration', () => {
       const user = await createTestUser();
 
       const result = await videoService.requestUpload(user.id, {
+        title: 't',
+        description: 'd',
         type: 'SHORT',
         durationSeconds: 10,
         contentType: 'video/mp4',

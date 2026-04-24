@@ -22,6 +22,15 @@ vi.mock('bullmq', () => {
 });
 
 describe('moderation worker logic', () => {
+  beforeAll(async () => {
+    // Import after mocks are set; it will instantiate the Worker and capture the processor.
+    await import('../../src/jobs/moderation.worker');
+
+    if (!capturedProcessor) {
+      throw new Error('Failed to capture moderation worker processor');
+    }
+  });
+
   beforeEach(async () => {
     analyzeContentMock.mockReset();
 
@@ -29,13 +38,6 @@ describe('moderation worker logic', () => {
     await prisma.notification.deleteMany();
     await prisma.video.deleteMany();
     await prisma.user.deleteMany();
-
-    // Import after mocks are set; it will instantiate the Worker and capture the processor.
-    await import('../../src/jobs/moderation.worker');
-
-    if (!capturedProcessor) {
-      throw new Error('Failed to capture moderation worker processor');
-    }
   });
 
   it('auto-approves video when maxScore < 40', async () => {

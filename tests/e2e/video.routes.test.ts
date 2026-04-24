@@ -1,4 +1,4 @@
-import supertest from 'supertest';
+import supertest, { SuperTest, Test } from 'supertest';
 
 // Prevent starting background workers during E2E.
 vi.mock('../../src/jobs', () => ({
@@ -25,7 +25,7 @@ import { buildApp } from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
-let request: any;
+let request: SuperTest<Test>;
 let accessToken: string;
 let userId: string;
 
@@ -36,22 +36,26 @@ describe('Video routes E2E', () => {
     request = supertest(app.server);
 
     // register + login
-    await request.post('/api/v1/auth/register').send({
+    const register = await request.post('/api/v1/auth/register').send({
       username: 'user_1',
       email: 'user1@example.com',
       password: 'Password123!',
       publicKey: 'pk',
     });
+    expect(register.status).toBe(201);
 
     const login = await request.post('/api/v1/auth/login').send({
       email: 'user1@example.com',
       password: 'Password123!',
     });
+    expect(login.status).toBe(200);
+    expect(login.body.data?.accessToken).toBeTruthy();
 
     accessToken = login.body.data.accessToken;
 
     const user = await prisma.user.findUnique({ where: { email: 'user1@example.com' } });
-    userId = user!.id;
+    if (!user) throw new Error('User not found after login');
+    userId = user.id;
   });
 
   afterAll(async () => {
@@ -266,7 +270,7 @@ describe('Video routes E2E', () => {
     expect(res.body.data.success).toBe(true);
   });
 
-  it('DELETE /api/v1/videos/:id → 403 deletes other user\'s video', async () => {
+  it('DELETE /api/v1/videos/:id → 404 deletes other user\'s video', async () => {
     const other = await prisma.user.create({
       data: {
         username: 'other_user',

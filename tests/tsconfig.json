@@ -1,6 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
+    "module": "nodenext",
     "rootDir": "..",
     "types": ["vitest/globals", "node"]
   },
