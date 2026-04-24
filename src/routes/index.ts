@@ -4,6 +4,7 @@
 import { FastifyInstance } from 'fastify';
 import { authRoutes } from './auth.routes';
 import { videoRoutes } from './video.routes';
+import { adminRoutes } from './admin.routes';
 import { startWorkers } from '../jobs';
 
 export async function registerRoutes(app: FastifyInstance) {
@@ -13,8 +14,7 @@ export async function registerRoutes(app: FastifyInstance) {
   startWorkers();
 
   // Future route registrations:
-  // app.register(videoRoutes, { prefix: '/api/v1/videos' });
   // app.register(socialRoutes, { prefix: '/api/v1/social' });
   // app.register(messageRoutes, { prefix: '/api/v1/messages' });
-  // app.register(adminRoutes, { prefix: '/api/v1/admin' });
+  app.register(adminRoutes, { prefix: '/api/v1/admin' });
 }
