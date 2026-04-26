@@ -12,24 +12,27 @@ import type { SendMessageInput } from '../validators/social.validators';
 // ─── Public Key Retrieval ─────────────────────────────────────────────────────
 
 /**
- * Returns the recipient's public key so the client can encrypt the message
- * before calling sendMessage. Must be called before sendMessage.
+ * @deprecated Use GET /api/v1/e2ee/pre-key-bundle/:userId instead.
+ * Kept for backward compatibility — returns identity key only.
  */
 export async function getRecipientPublicKey(requestingUserId: string, recipientId: string) {
-  // TODO: check if requesting user has blocked recipient
-  const recipient = await prisma.user.findUnique({
+  // Deprecated: use GET /api/v1/e2ee/pre-key-bundle/:userId instead
+  // This function is kept for backward compatibility and returns identity key only
+  const user = await prisma.user.findUnique({
     where: { id: recipientId },
     select: { id: true, username: true, publicKey: true, isBanned: true },
   });
 
-  if (!recipient || recipient.isBanned) {
+  if (!user || !user.publicKey || user.isBanned) {
     throw new NotFoundError('User');
   }
 
   return {
-    userId: recipient.id,
-    username: recipient.username,
-    publicKey: recipient.publicKey,
+    userId: user.id,
+    username: user.username,
+    publicKey: user.publicKey,
+    deprecated: true,
+    message: 'Use GET /api/v1/e2ee/pre-key-bundle/:userId for full PFS bundle',
   };
 }
 
