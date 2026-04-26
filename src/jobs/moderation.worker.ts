@@ -8,6 +8,7 @@ import { ValidationError } from '../utils/errors';
 
 const AUTO_APPROVE_THRESHOLD = MODERATION.AUTO_APPROVE_THRESHOLD;
 const AUTO_REJECT_THRESHOLD = MODERATION.AUTO_REJECT_THRESHOLD;
+const FINDINGS_SIGNIFICANCE_THRESHOLD = 20;
 
 type ModerationJobData = {
   videoId: string;
@@ -127,7 +128,7 @@ export const moderationWorker = new Worker(
 
     // Build a human-readable breakdown of what the AI found
     const findings = Object.entries(scores)
-      .filter(([_, score]) => score >= 20)
+      .filter(([_, score]) => score >= FINDINGS_SIGNIFICANCE_THRESHOLD)
       .map(([category, score]) => `${category}: ${score}%`)
       .join(", ");
 

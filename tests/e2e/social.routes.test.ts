@@ -12,6 +12,7 @@ vi.mock('../../src/jobs/queues', () => ({
 
 import { buildApp } from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
+import { cleanAll } from '../helpers/db';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
 let request: ReturnType<typeof supertest>;
@@ -44,10 +45,6 @@ describe('Social routes E2E (/api/v1/social)', () => {
     app = await buildApp();
     await app.ready();
     request = supertest(app.server);
-
-    const main = await registerAndLogin('social_main');
-    accessToken = main.token;
-    userId = main.userId;
   });
 
   afterAll(async () => {
@@ -55,15 +52,10 @@ describe('Social routes E2E (/api/v1/social)', () => {
   });
 
   beforeEach(async () => {
-    await prisma.notification.deleteMany();
-    await prisma.comment.deleteMany();
-    await prisma.follow.deleteMany();
-    await prisma.message.deleteMany();
-    await prisma.dislike.deleteMany();
-    await prisma.video.deleteMany();
-    await prisma.refreshToken.deleteMany({ where: { userId: { not: userId } } });
-    // Keep the main user; only delete extras
-    await prisma.user.deleteMany({ where: { id: { not: userId } } });
+    await cleanAll();
+    const main = await registerAndLogin(`main_${Date.now()}`);
+    accessToken = main.token;
+    userId = main.userId;
   });
 
   // ─── 401 guard ───────────────────────────────────────────────────────────────
@@ -265,7 +257,7 @@ describe('Social routes E2E (/api/v1/social)', () => {
       const res = await request
         .post('/api/v1/social/comments')
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ videoId: '00000000-0000-0000-0000-000000000099', content: 'Hi' });
+        .send({ videoId: '11111111-1111-4111-a111-111111111111', content: 'Not found' });
 
       expect(res.status).toBe(404);
     });
@@ -340,7 +332,7 @@ describe('Social routes E2E (/api/v1/social)', () => {
 
     it('404 → comment not found', async () => {
       const res = await request
-        .get('/api/v1/social/comments/00000000-0000-0000-0000-000000000099/replies')
+        .get('/api/v1/social/comments/11111111-1111-4111-a111-111111111111/replies')
         .set('Authorization', `Bearer ${accessToken}`);
 
       expect(res.status).toBe(404);

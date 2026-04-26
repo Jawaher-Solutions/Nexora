@@ -29,7 +29,7 @@ export const adminUsersQuerySchema = z.object({
   page:     z.coerce.number().min(1).optional().default(1),
   limit:    z.coerce.number().min(1).max(100).optional().default(20),
   search:   z.string().optional(),
-  isBanned: z.coerce.boolean().optional(),
+  isBanned: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
   role:     z.enum(['USER', 'MODERATOR', 'ADMIN']).optional(),
 });
 
@@ -64,6 +64,17 @@ export const moderationLogsQuerySchema = z.object({
     .optional(),
   videoId:     z.string().uuid().optional(),
   moderatorId: z.string().uuid().optional(),
-});
+}).refine(
+  (data) => {
+    if (data.startDate && data.endDate) {
+      return data.startDate <= data.endDate;
+    }
+    return true;
+  },
+  {
+    message: 'startDate must be before or equal to endDate',
+    path: ['startDate'],
+  }
+);
 
 export type ModerationLogsQuery = z.infer<typeof moderationLogsQuerySchema>;

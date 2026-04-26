@@ -4,7 +4,6 @@
 // All routes require authentication.
 
 import { FastifyInstance } from 'fastify';
-import { ZodError } from 'zod';
 import { authenticate } from '../middleware/auth.middleware';
 import {
   followUser,
@@ -22,41 +21,23 @@ import {
   followParamSchema,
   addCommentSchema,
   getCommentsQuerySchema,
-  deleteCommentParamSchema,
+  commentIdParamSchema,
+  paginationQuerySchema,
   notificationsQuerySchema,
 } from '../validators/social.validators';
-import { ValidationError } from '../utils/errors';
-
-function toValidationError(error: unknown): ValidationError {
-  if (error instanceof ZodError) {
-    return new ValidationError(error.issues.map((issue) => issue.message).join(', '));
-  }
-  return new ValidationError('Invalid request data');
-}
+import { parseOrThrow } from '../utils/parseOrThrow';
 
 export async function socialRoutes(app: FastifyInstance) {
   // ── Follow ───────────────────────────────────────────────────────────────
 
   app.post('/follow/:userId', { preHandler: [authenticate] }, async (request, reply) => {
-    let params;
-    try {
-      params = followParamSchema.parse(request.params);
-    } catch (error: unknown) {
-      throw toValidationError(error);
-    }
-
+    const params = parseOrThrow(followParamSchema, request.params);
     const result = await followUser(request.user.userId, params.userId);
     return reply.code(200).send({ success: true, data: result });
   });
 
   app.delete('/follow/:userId', { preHandler: [authenticate] }, async (request, reply) => {
-    let params;
-    try {
-      params = followParamSchema.parse(request.params);
-    } catch (error: unknown) {
-      throw toValidationError(error);
-    }
-
+    const params = parseOrThrow(followParamSchema, request.params);
     const result = await unfollowUser(request.user.userId, params.userId);
     return reply.code(200).send({ success: true, data: result });
   });
@@ -64,29 +45,15 @@ export async function socialRoutes(app: FastifyInstance) {
   // ── Followers / Following ─────────────────────────────────────────────────
 
   app.get('/followers/:userId', { preHandler: [authenticate] }, async (request, reply) => {
-    let params;
-    let query;
-    try {
-      params = followParamSchema.parse(request.params);
-      query = notificationsQuerySchema.parse(request.query);
-    } catch (error: unknown) {
-      throw toValidationError(error);
-    }
-
+    const params = parseOrThrow(followParamSchema, request.params);
+    const query = parseOrThrow(paginationQuerySchema, request.query);
     const result = await getFollowers(params.userId, query.page, query.limit);
     return reply.code(200).send({ success: true, data: result });
   });
 
   app.get('/following/:userId', { preHandler: [authenticate] }, async (request, reply) => {
-    let params;
-    let query;
-    try {
-      params = followParamSchema.parse(request.params);
-      query = notificationsQuerySchema.parse(request.query);
-    } catch (error: unknown) {
-      throw toValidationError(error);
-    }
-
+    const params = parseOrThrow(followParamSchema, request.params);
+    const query = parseOrThrow(paginationQuerySchema, request.query);
     const result = await getFollowing(params.userId, query.page, query.limit);
     return reply.code(200).send({ success: true, data: result });
   });
@@ -94,65 +61,36 @@ export async function socialRoutes(app: FastifyInstance) {
   // ── Comments ──────────────────────────────────────────────────────────────
 
   app.post('/comments', { preHandler: [authenticate] }, async (request, reply) => {
-    let body;
-    try {
-      body = addCommentSchema.parse(request.body);
-    } catch (error: unknown) {
-      throw toValidationError(error);
-    }
-
+    const body = parseOrThrow(addCommentSchema, request.body);
     const result = await addComment(request.user.userId, body);
     return reply.code(201).send({ success: true, data: result });
   });
 
   app.get('/comments', { preHandler: [authenticate] }, async (request, reply) => {
-    let query;
-    try {
-      query = getCommentsQuerySchema.parse(request.query);
-    } catch (error: unknown) {
-      throw toValidationError(error);
-    }
-
+    const query = parseOrThrow(getCommentsQuerySchema, request.query);
     const result = await getComments(query.videoId, query.page, query.limit);
     return reply.code(200).send({ success: true, data: result });
   });
 
+  // Use generic commentIdParamSchema — not deletion-specific
   app.get('/comments/:commentId/replies', { preHandler: [authenticate] }, async (request, reply) => {
-    let params;
-    let query;
-    try {
-      params = deleteCommentParamSchema.parse(request.params);
-      query = notificationsQuerySchema.parse(request.query);
-    } catch (error: unknown) {
-      throw toValidationError(error);
-    }
-
+    const params = parseOrThrow(commentIdParamSchema, request.params);
+    const query = parseOrThrow(paginationQuerySchema, request.query);
     const result = await getReplies(params.commentId, query.page, query.limit);
     return reply.code(200).send({ success: true, data: result });
   });
 
   app.delete('/comments/:commentId', { preHandler: [authenticate] }, async (request, reply) => {
-    let params;
-    try {
-      params = deleteCommentParamSchema.parse(request.params);
-    } catch (error: unknown) {
-      throw toValidationError(error);
-    }
-
-    const result = await deleteComment(params.commentId, request.user.userId, request.user.role);
+    const params = parseOrThrow(commentIdParamSchema, request.params);
+    const role = request.user.role as 'USER' | 'MODERATOR' | 'ADMIN';
+    const result = await deleteComment(params.commentId, request.user.userId, role);
     return reply.code(200).send({ success: true, data: result });
   });
 
   // ── Notifications ─────────────────────────────────────────────────────────
 
   app.get('/notifications', { preHandler: [authenticate] }, async (request, reply) => {
-    let query;
-    try {
-      query = notificationsQuerySchema.parse(request.query);
-    } catch (error: unknown) {
-      throw toValidationError(error);
-    }
-
+    const query = parseOrThrow(paginationQuerySchema, request.query);
     const result = await getNotifications(request.user.userId, query.page, query.limit);
     return reply.code(200).send({ success: true, data: result });
   });

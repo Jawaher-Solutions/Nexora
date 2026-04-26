@@ -16,6 +16,7 @@ import type { SendMessageInput } from '../validators/social.validators';
  * before calling sendMessage. Must be called before sendMessage.
  */
 export async function getRecipientPublicKey(requestingUserId: string, recipientId: string) {
+  // TODO: check if requesting user has blocked recipient
   const recipient = await prisma.user.findUnique({
     where: { id: recipientId },
     select: { id: true, username: true, publicKey: true, isBanned: true },
@@ -41,6 +42,7 @@ export async function sendMessage(senderId: string, input: SendMessageInput) {
 
   const recipient = await prisma.user.findUnique({
     where: { id: input.recipientId },
+    select: { id: true, isBanned: true },
   });
 
   if (!recipient || recipient.isBanned) {
@@ -70,8 +72,13 @@ export async function getConversation(
   page: number,
   limit: number
 ) {
-  const otherUser = await prisma.user.findUnique({ where: { id: otherUserId } });
-  if (!otherUser) {
+  // Only select id and isBanned — never expose passwordHash or other sensitive fields
+  const otherUser = await prisma.user.findUnique({
+    where: { id: otherUserId },
+    select: { id: true, isBanned: true },
+  });
+
+  if (!otherUser || otherUser.isBanned) {
     throw new NotFoundError('User');
   }
 
@@ -94,10 +101,16 @@ export async function getConversation(
     prisma.message.count({ where: conversationFilter }),
   ]);
 
-  // Fire-and-forget: mark incoming messages as read
-  void prisma.message.updateMany({
+  // Fire-and-forget: mark incoming messages as read, log any DB errors
+  prisma.message.updateMany({
     where: { senderId: otherUserId, recipientId: userId, isRead: false },
     data: { isRead: true },
+  }).catch((err: unknown) => {
+    console.error('[message.service] Failed to mark messages as read', {
+      err,
+      userId,
+      otherUserId,
+    });
   });
 
   return {
@@ -113,7 +126,7 @@ export async function getConversation(
 
 // ─── Conversation List ────────────────────────────────────────────────────────
 
-export async function getConversationList(userId: string) {
+export async function getConversationList(userId: string, page = 1, limit = 20) {
   const [sentTo, receivedFrom] = await Promise.all([
     prisma.message.findMany({
       where: { senderId: userId },
@@ -136,8 +149,14 @@ export async function getConversationList(userId: string) {
     if (m.senderId !== userId) peerIds.add(m.senderId);
   }
 
+  // Apply pagination to the peer list
+  const allPeerIds = Array.from(peerIds);
+  const total = allPeerIds.length;
+  const skip = (page - 1) * limit;
+  const pagedPeerIds = allPeerIds.slice(skip, skip + limit);
+
   const conversationEntries = await Promise.all(
-    Array.from(peerIds).map(async (peerId) => {
+    pagedPeerIds.map(async (peerId) => {
       const [user, lastMessage] = await Promise.all([
         prisma.user.findUnique({
           where: { id: peerId },
@@ -174,5 +193,13 @@ export async function getConversationList(userId: string) {
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
     .sort((a, b) => b.lastMessage.createdAt.getTime() - a.lastMessage.createdAt.getTime());
 
-  return { conversations };
+  return {
+    conversations,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
 }

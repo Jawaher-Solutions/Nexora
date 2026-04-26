@@ -4,4 +4,4 @@ dist/
 .env.test
 *.log
 coverage/
-
+claude.md

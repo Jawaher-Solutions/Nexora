@@ -60,9 +60,16 @@ export async function createTestVideo(
   });
 }
 
-export async function cleanTable(table: keyof typeof prisma) {
-  const delegate = (prisma as any)[table];
-  if (delegate && typeof delegate.deleteMany === 'function') {
-    await delegate.deleteMany();
-  }
+export async function cleanAll() {
+  await prisma.moderationLog.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.flag.deleteMany();
+  await prisma.like.deleteMany();
+  await prisma.dislike.deleteMany();
+  await prisma.comment.deleteMany();
+  await prisma.message.deleteMany();
+  await prisma.follow.deleteMany();
+  await prisma.video.deleteMany();
+  await prisma.refreshToken.deleteMany();
+  await prisma.user.deleteMany();
 }

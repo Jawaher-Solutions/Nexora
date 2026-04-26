@@ -282,13 +282,12 @@ export async function unbanUser(targetUserId: string) {
 export async function getAnalytics() {
   const now          = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfWeek  = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
-  const startOfMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const last7Days  = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
 
   const [
     totalUsers,
     newUsersToday,
-    newUsersThisWeek,
+    newUsersLast7Days,
     totalVideos,
     pendingReview,
     approvedTotal,
@@ -299,7 +298,7 @@ export async function getAnalytics() {
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: startOfToday } } }),
-    prisma.user.count({ where: { createdAt: { gte: startOfWeek  } } }),
+    prisma.user.count({ where: { createdAt: { gte: last7Days  } } }),
     prisma.video.count(),
     prisma.video.count({ where: { status: 'PENDING_REVIEW' } }),
     prisma.video.count({ where: { status: 'APPROVED'       } }),
@@ -312,10 +311,6 @@ export async function getAnalytics() {
     }),
   ]);
 
-  // Suppress unused variable warning — startOfMonth is intentionally kept for
-  // potential future analytics without altering the Promise.all structure.
-  void startOfMonth;
-
   const breakdown = moderationBreakdown.reduce<Record<string, number>>((acc, item) => {
     acc[item.decision] = item._count.decision;
     return acc;
@@ -325,7 +320,7 @@ export async function getAnalytics() {
     users: {
       total:       totalUsers,
       newToday:    newUsersToday,
-      newThisWeek: newUsersThisWeek,
+      newLast7Days: newUsersLast7Days,
     },
     videos: {
       total:         totalVideos,

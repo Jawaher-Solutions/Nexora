@@ -21,7 +21,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(rateLimit, {
-    max: 100,
+    max: env.NODE_ENV === 'test' ? 1000 : 100,
     timeWindow: '1 minute',
   });
 

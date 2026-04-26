@@ -1,3 +1,17 @@
+// Prevent starting background workers during E2E.
+vi.mock('../../src/jobs', () => ({
+  startWorkers: () => {},
+}));
+
+vi.mock('../../src/jobs/moderation.worker', () => ({
+  moderationWorker: { on: vi.fn() },
+}));
+
+vi.mock('../../src/jobs/queues', () => ({
+  addModerationJob: vi.fn().mockResolvedValue(undefined),
+  moderationQueue: {},
+}));
+
 import supertest from 'supertest';
 import { prisma } from '../../src/lib/prisma';
 import { buildApp } from '../../src/app';
@@ -30,6 +44,9 @@ describe('Admin routes E2E', () => {
 
   beforeEach(async () => {
     await prisma.moderationLog.deleteMany();
+    await prisma.notification.deleteMany();
+    await prisma.follow.deleteMany();
+    await prisma.message.deleteMany();
     await prisma.video.deleteMany();
     await prisma.refreshToken.deleteMany();
     await prisma.user.deleteMany();

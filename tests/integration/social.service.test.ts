@@ -65,7 +65,7 @@ describe('social.service integration', () => {
 
     it('throws NotFoundError when followee does not exist', async () => {
       const u1 = await createTestUser();
-      await expect(followUser(u1.id, '00000000-0000-0000-0000-000000000099')).rejects.toBeInstanceOf(NotFoundError);
+      await expect(followUser(u1.id, '00000000-0000-4000-8000-000000000099')).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('throws NotFoundError when followee is banned', async () => {
@@ -214,7 +214,7 @@ describe('social.service integration', () => {
     it('throws NotFoundError for non-existent video', async () => {
       const user = await createTestUser();
       await expect(
-        addComment(user.id, { videoId: '00000000-0000-0000-0000-000000000099', content: 'hi' })
+        addComment(user.id, { videoId: '00000000-0000-4000-8000-000000000099', content: 'hi' })
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
@@ -233,7 +233,7 @@ describe('social.service integration', () => {
         addComment(owner.id, {
           videoId: video.id,
           content: 'reply',
-          parentId: '00000000-0000-0000-0000-000000000099',
+          parentId: '00000000-0000-4000-8000-000000000099',
         })
       ).rejects.toBeInstanceOf(NotFoundError);
     });
@@ -301,7 +301,7 @@ describe('social.service integration', () => {
 
     it('throws NotFoundError for a non-existent comment', async () => {
       await expect(
-        getReplies('00000000-0000-0000-0000-000000000099', 1, 10)
+        getReplies('00000000-0000-4000-8000-000000000099', 1, 10)
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
@@ -363,7 +363,7 @@ describe('social.service integration', () => {
     it('throws NotFoundError for a non-existent comment', async () => {
       const user = await createTestUser();
       await expect(
-        deleteComment('00000000-0000-0000-0000-000000000099', user.id, 'USER')
+        deleteComment('00000000-0000-4000-8000-000000000099', user.id, 'USER')
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });

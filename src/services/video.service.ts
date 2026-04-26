@@ -223,10 +223,10 @@ export async function likeVideo(userId: string, videoId: string) {
         data: { userId, videoId },
       });
     } catch (error: unknown) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
         throw new ConflictError('Already liked');
       }
-      throw new ValidationError('Unable to like this video right now.');
+      throw error;
     }
 
     return tx.video.update({
@@ -315,16 +315,24 @@ export async function flagVideo(userId: string, videoId: string, reason: string)
 }
 
 export async function dislikeVideo(userId: string, videoId: string) {
-  const video = await prisma.video.findUnique({ where: { id: videoId } });
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { id: true, status: true },
+  });
   if (!video || video.status !== "APPROVED") {
     throw new NotFoundError("Video");
   }
 
   const updatedVideo = await prisma.$transaction(async (tx) => {
+    const currentVideo = await tx.video.findUnique({ where: { id: videoId }, select: { status: true } });
+    if (!currentVideo || currentVideo.status !== "APPROVED") {
+      throw new NotFoundError("Video");
+    }
+
     try {
       await tx.dislike.create({ data: { userId, videoId } });
     } catch (error: unknown) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
         throw new ConflictError("Already disliked");
       }
       throw error;
@@ -365,14 +373,32 @@ export async function undislikeVideo(userId: string, videoId: string) {
     });
   });
 
-  return { disliked: false };
+  const updated = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { dislikesCount: true },
+  });
+
+  return { disliked: false, dislikesCount: updated?.dislikesCount ?? 0 };
 }
 
+const shareRateLimits = new Set<string>();
+
 export async function shareVideo(userId: string, videoId: string) {
-  const video = await prisma.video.findUnique({ where: { id: videoId } });
+  const rateLimitKey = `${userId}:${videoId}`;
+  if (shareRateLimits.has(rateLimitKey)) {
+    throw new ConflictError("Rate limit exceeded for sharing this video");
+  }
+
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { id: true, status: true },
+  });
   if (!video || video.status !== "APPROVED") {
     throw new NotFoundError("Video");
   }
+
+  shareRateLimits.add(rateLimitKey);
+  setTimeout(() => shareRateLimits.delete(rateLimitKey), 60000);
 
   const updatedVideo = await prisma.video.update({
     where: { id: videoId },

@@ -36,8 +36,9 @@ describe('video.service integration', () => {
     await prisma.notification.deleteMany();
     await prisma.flag.deleteMany();
     await prisma.like.deleteMany();
-    await prisma.video.deleteMany();
+    await prisma.dislike.deleteMany();
     await prisma.follow.deleteMany();
+    await prisma.video.deleteMany();
     await prisma.refreshToken.deleteMany();
     await prisma.user.deleteMany();
   });
@@ -248,6 +249,24 @@ describe('video.service integration', () => {
       const video = await createTestVideo(owner.id, { status: 'APPROVED' });
 
       await expect(videoService.undislikeVideo(user.id, video.id)).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('dislikeVideo rejects for a non-APPROVED video', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'PENDING' });
+
+      await expect(videoService.dislikeVideo(user.id, video.id)).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('shareVideo verifies share persistence', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED', sharesCount: 0 });
+
+      await videoService.shareVideo(user.id, video.id);
+      const refreshed = await prisma.video.findUnique({ where: { id: video.id } });
+      expect(refreshed?.sharesCount).toBe(1);
     });
 
     it('shareVideo increments sharesCount by 1', async () => {

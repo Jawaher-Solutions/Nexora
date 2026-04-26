@@ -5,11 +5,15 @@ vi.mock('../../src/jobs', () => ({
   startWorkers: () => {},
 }));
 
+vi.mock('../../src/jobs/moderation.worker', () => ({
+  moderationWorker: { on: vi.fn() },
+}));
+
 import { buildApp } from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
-let request: supertest.SuperTest<supertest.Test>;
+let request: ReturnType<typeof supertest>;
 
 describe('POST /api/v1/auth/* (E2E)', () => {
   beforeAll(async () => {
@@ -23,6 +27,14 @@ describe('POST /api/v1/auth/* (E2E)', () => {
   });
 
   beforeEach(async () => {
+    await prisma.moderationLog.deleteMany();
+    await prisma.notification.deleteMany();
+    await prisma.flag.deleteMany();
+    await prisma.like.deleteMany();
+    await prisma.comment.deleteMany();
+    await prisma.message.deleteMany();
+    await prisma.follow.deleteMany();
+    await prisma.video.deleteMany();
     await prisma.refreshToken.deleteMany();
     await prisma.user.deleteMany();
   });
@@ -136,7 +148,7 @@ describe('POST /api/v1/auth/* (E2E)', () => {
   });
 
   it('POST /api/v1/auth/refresh → 401 for invalid/expired token', async () => {
-    const res = await request.post('/api/v1/auth/refresh').send({ refreshToken: 'invalid-token' });
+    const res = await request.post('/api/v1/auth/refresh').send({ refreshToken: '00000000-0000-4000-8000-000000000099' });
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
   });

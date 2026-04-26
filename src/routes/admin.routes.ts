@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate } from '../middleware/auth.middleware';
+import { ZodError } from 'zod';
 import { requireRole } from '../middleware/role.middleware';
 import * as adminService from '../services/admin.service';
 import { ValidationError } from '../utils/errors';
@@ -11,6 +12,13 @@ import {
   moderationLogsQuerySchema,
 } from '../validators/admin.validators';
 
+function toValidationError(error: unknown) {
+  if (error instanceof ZodError) {
+    throw new ValidationError(error.issues.map((i) => i.message).join(', '));
+  }
+  throw error;
+}
+
 const isModerator = requireRole('MODERATOR', 'ADMIN');
 const isAdmin     = requireRole('ADMIN');
 
@@ -21,11 +29,8 @@ export async function adminRoutes(app: FastifyInstance) {
       const query = adminQueueQuerySchema.parse(request.query);
       const result = await adminService.getModerationQueue(query);
       return reply.send({ success: true, data: result });
-    } catch (error: any) {
-      if (error.name === 'ZodError') {
-        throw new ValidationError(error.errors[0]?.message || 'Invalid query parameters');
-      }
-      throw error;
+    } catch (error: unknown) {
+      toValidationError(error);
     }
   });
 
@@ -38,11 +43,8 @@ export async function adminRoutes(app: FastifyInstance) {
         const body = reviewVideoSchema.parse(request.body);
         const result = await adminService.reviewVideo(request.params.videoId, request.user.userId, body);
         return reply.send({ success: true, data: result });
-      } catch (error: any) {
-        if (error.name === 'ZodError') {
-          throw new ValidationError(error.errors[0]?.message || 'Invalid body parameters');
-        }
-        throw error;
+      } catch (error: unknown) {
+        toValidationError(error);
       }
     }
   );
@@ -53,11 +55,8 @@ export async function adminRoutes(app: FastifyInstance) {
       const query = adminUsersQuerySchema.parse(request.query);
       const result = await adminService.getUsers(query);
       return reply.send({ success: true, data: result });
-    } catch (error: any) {
-      if (error.name === 'ZodError') {
-        throw new ValidationError(error.errors[0]?.message || 'Invalid query parameters');
-      }
-      throw error;
+    } catch (error: unknown) {
+      toValidationError(error);
     }
   });
 
@@ -80,11 +79,8 @@ export async function adminRoutes(app: FastifyInstance) {
         const body = banUserSchema.parse(request.body);
         const result = await adminService.banUser(request.params.userId, request.user.userId, body);
         return reply.send({ success: true, data: result });
-      } catch (error: any) {
-        if (error.name === 'ZodError') {
-          throw new ValidationError(error.errors[0]?.message || 'Invalid body parameters');
-        }
-        throw error;
+      } catch (error: unknown) {
+        toValidationError(error);
       }
     }
   );
@@ -111,11 +107,8 @@ export async function adminRoutes(app: FastifyInstance) {
       const query = moderationLogsQuerySchema.parse(request.query);
       const result = await adminService.getModerationLogs(query);
       return reply.send({ success: true, data: result });
-    } catch (error: any) {
-      if (error.name === 'ZodError') {
-        throw new ValidationError(error.errors[0]?.message || 'Invalid query parameters');
-      }
-      throw error;
+    } catch (error: unknown) {
+      toValidationError(error);
     }
   });
 }

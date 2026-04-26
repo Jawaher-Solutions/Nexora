@@ -3,6 +3,7 @@
 // RULE: No HTTP references. Throw AppError subclasses only. No .then() chains.
 
 import { prisma } from '../lib/prisma';
+import { Prisma } from '@prisma/client';
 import {
   NotFoundError,
   ForbiddenError,
@@ -20,31 +21,41 @@ export async function followUser(followerId: string, followeeId: string) {
     throw new ValidationError('You cannot follow yourself');
   }
 
+  // Check the followee exists and isn't banned
   const followee = await prisma.user.findUnique({ where: { id: followeeId } });
   if (!followee || followee.isBanned) {
     throw new NotFoundError('User');
   }
 
-  const existing = await prisma.follow.findUnique({
-    where: { followerId_followeeId: { followerId, followeeId } },
-  });
-  if (existing) {
-    throw new ConflictError('Already following this user');
-  }
-
-  await prisma.follow.create({ data: { followerId, followeeId } });
-
+  // Check the follower isn't banned before allowing the action
   const follower = await prisma.user.findUnique({
     where: { id: followerId },
-    select: { username: true },
+    select: { username: true, isBanned: true },
   });
+  if (!follower || follower.isBanned) {
+    throw new ForbiddenError('Banned users cannot follow others');
+  }
 
-  await createNotification(
-    followeeId,
-    'FOLLOW',
-    `${follower!.username} started following you`,
-    followerId
-  );
+  // Use try/catch on create to handle concurrent duplicates (P2002)
+  try {
+    await prisma.follow.create({ data: { followerId, followeeId } });
+  } catch (error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      throw new ConflictError('Already following this user');
+    }
+    throw error;
+  }
+
+  try {
+    await createNotification(
+      followeeId,
+      'FOLLOW',
+      `${follower.username} started following you`,
+      followerId
+    );
+  } catch (err) {
+    console.error('[social.service] Failed to create FOLLOW notification', err);
+  }
 
   return { following: true };
 }
@@ -140,16 +151,16 @@ export async function addComment(userId: string, input: AddCommentInput) {
   });
 
   if (video.userId !== userId) {
-    const commenter = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { username: true },
-    });
-    await createNotification(
-      video.userId,
-      'COMMENT',
-      `${commenter!.username} commented on your video`,
-      video.id
-    );
+    try {
+      await createNotification(
+        video.userId,
+        'COMMENT',
+        `${comment.user.username} commented on your video`,
+        video.id
+      );
+    } catch (err) {
+      console.error('[social.service] Failed to create COMMENT notification', err);
+    }
   }
 
   return comment;
@@ -229,9 +240,26 @@ export async function deleteComment(commentId: string, userId: string, userRole:
     throw new ForbiddenError('You can only delete your own comments');
   }
 
-  // Delete replies first to avoid FK constraint issues if cascade is not set
-  await prisma.comment.deleteMany({ where: { parentId: commentId } });
-  await prisma.comment.delete({ where: { id: commentId } });
+  // BFS to find all descendants
+  const allIds: string[] = [commentId];
+  let currentIds: string[] = [commentId];
+
+  while (currentIds.length > 0) {
+    const children = await prisma.comment.findMany({
+      where: { parentId: { in: currentIds } },
+      select: { id: true },
+    });
+    
+    if (children.length === 0) break;
+    
+    currentIds = children.map(c => c.id);
+    allIds.push(...currentIds);
+  }
+
+  // Atomically delete all descendants and the root
+  await prisma.$transaction([
+    prisma.comment.deleteMany({ where: { id: { in: allIds } } })
+  ]);
 
   return { success: true };
 }
