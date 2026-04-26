@@ -36,8 +36,8 @@ describe('video.service integration', () => {
     await prisma.notification.deleteMany();
     await prisma.flag.deleteMany();
     await prisma.like.deleteMany();
-    await prisma.video.deleteMany();
     await prisma.follow.deleteMany();
+    await prisma.video.deleteMany();
     await prisma.refreshToken.deleteMany();
     await prisma.user.deleteMany();
   });

@@ -5,6 +5,7 @@ import { NotFoundError, ForbiddenError } from '../../src/utils/errors';
 
 describe('admin.service integration', () => {
   beforeEach(async () => {
+    await prisma.notification.deleteMany();
     await prisma.moderationLog.deleteMany();
     await prisma.video.deleteMany();
     await prisma.refreshToken.deleteMany();
@@ -29,10 +30,10 @@ describe('admin.service integration', () => {
     const mod = await createTestUser({ role: 'MODERATOR' });
     const video = await createTestVideo(owner.id, { status: 'PENDING_REVIEW' });
 
-    const updated = await adminService.reviewVideo(video.id, mod.id, 'APPROVE', 'Looks good');
-    expect(updated.status).toBe('APPROVED');
+    const result = await adminService.reviewVideo(video.id, mod.id, 'APPROVE', 'Looks good');
+    expect(result.status).toBe('APPROVED');
 
-    const logs = await adminService.getModerationLogs();
+    const { logs } = await adminService.getModerationLogs();
     expect(logs.length).toBe(1);
     expect(logs[0].decision).toBe('HUMAN_APPROVED');
     expect(logs[0].humanNotes).toBe('Looks good');
@@ -43,17 +44,17 @@ describe('admin.service integration', () => {
     const mod = await createTestUser({ role: 'MODERATOR' });
     const video = await createTestVideo(owner.id, { status: 'PENDING_REVIEW' });
 
-    const updated = await adminService.reviewVideo(video.id, mod.id, 'REJECT');
-    expect(updated.status).toBe('REJECTED');
+    const result = await adminService.reviewVideo(video.id, mod.id, 'REJECT');
+    expect(result.status).toBe('REJECTED');
 
-    const logs = await adminService.getModerationLogs();
+    const { logs } = await adminService.getModerationLogs();
     expect(logs.length).toBe(1);
     expect(logs[0].decision).toBe('HUMAN_REJECTED');
   });
 
   it('throws NotFoundError when reviewing unknown video', async () => {
     const mod = await createTestUser({ role: 'MODERATOR' });
-    await expect(adminService.reviewVideo('fake', mod.id, 'APPROVE')).rejects.toThrow(NotFoundError);
+    await expect(adminService.reviewVideo('00000000-0000-4000-8000-000000000099', mod.id, 'APPROVE')).rejects.toThrow(NotFoundError);
   });
 
   it('bans a user', async () => {
@@ -74,7 +75,7 @@ describe('admin.service integration', () => {
 
   it('throws NotFoundError when banning unknown user', async () => {
     const admin = await createTestUser({ role: 'ADMIN' });
-    await expect(adminService.banUser('fake', admin.id)).rejects.toThrow(NotFoundError);
+    await expect(adminService.banUser('00000000-0000-4000-8000-000000000099', admin.id)).rejects.toThrow(NotFoundError);
   });
 
   it('gets analytics', async () => {

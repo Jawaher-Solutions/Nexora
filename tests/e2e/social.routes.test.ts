@@ -5,6 +5,10 @@ vi.mock('../../src/jobs', () => ({
   startWorkers: () => {},
 }));
 
+vi.mock('../../src/jobs/moderation.worker', () => ({
+  moderationWorker: { on: vi.fn() },
+}));
+
 vi.mock('../../src/jobs/queues', () => ({
   addModerationJob: vi.fn().mockResolvedValue(undefined),
   moderationQueue: {},
@@ -60,6 +64,8 @@ describe('Social routes E2E (/api/v1/social)', () => {
     await prisma.follow.deleteMany();
     await prisma.message.deleteMany();
     await prisma.video.deleteMany();
+    // Delete refreshTokens for extra users before deleting the users
+    await prisma.refreshToken.deleteMany({ where: { userId: { not: userId } } });
     // Keep the main user; only delete extras
     await prisma.user.deleteMany({ where: { id: { not: userId } } });
   });
@@ -263,7 +269,7 @@ describe('Social routes E2E (/api/v1/social)', () => {
       const res = await request
         .post('/api/v1/social/comments')
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ videoId: '00000000-0000-0000-0000-000000000099', content: 'Hi' });
+        .send({ videoId: '00000000-0000-4000-8000-000000000099', content: 'Hi' });
 
       expect(res.status).toBe(404);
     });
@@ -338,7 +344,7 @@ describe('Social routes E2E (/api/v1/social)', () => {
 
     it('404 → comment not found', async () => {
       const res = await request
-        .get('/api/v1/social/comments/00000000-0000-0000-0000-000000000099/replies')
+        .get('/api/v1/social/comments/00000000-0000-4000-8000-000000000099/replies')
         .set('Authorization', `Bearer ${accessToken}`);
 
       expect(res.status).toBe(404);

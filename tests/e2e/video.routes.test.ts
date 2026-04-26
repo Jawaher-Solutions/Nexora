@@ -5,6 +5,10 @@ vi.mock('../../src/jobs', () => ({
   startWorkers: () => {},
 }));
 
+vi.mock('../../src/jobs/moderation.worker', () => ({
+  moderationWorker: { on: vi.fn() },
+}));
+
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: vi.fn().mockResolvedValue('https://mock-r2.com/signed'),
 }));
@@ -25,7 +29,7 @@ import { buildApp } from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
-let request: SuperTest<Test>;
+let request: ReturnType<typeof supertest>;
 let accessToken: string;
 let userId: string;
 

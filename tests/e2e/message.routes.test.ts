@@ -6,6 +6,10 @@ vi.mock('../../src/jobs', () => ({
   startWorkers: () => {},
 }));
 
+vi.mock('../../src/jobs/moderation.worker', () => ({
+  moderationWorker: { on: vi.fn() },
+}));
+
 vi.mock('../../src/jobs/queues', () => ({
   addModerationJob: vi.fn().mockResolvedValue(undefined),
   moderationQueue: {},
@@ -77,8 +81,13 @@ describe('Message routes E2E (/api/v1/messages)', () => {
     ];
 
     for (const route of routes) {
-      const res = await route();
-      expect(res.status).toBe(401);
+      // No token
+      const noToken = await route();
+      expect(noToken.status).toBe(401);
+
+      // Invalid / malformed token
+      const badToken = await route().set('Authorization', 'Bearer garbage-token');
+      expect(badToken.status).toBe(401);
     }
   });
 
@@ -99,7 +108,7 @@ describe('Message routes E2E (/api/v1/messages)', () => {
 
     it('404 → recipient does not exist', async () => {
       const res = await request
-        .get('/api/v1/messages/public-key/00000000-0000-0000-0000-000000000099')
+        .get('/api/v1/messages/public-key/00000000-0000-4000-8000-000000000099')
         .set('Authorization', `Bearer ${senderToken}`);
 
       expect(res.status).toBe(404);
@@ -170,7 +179,7 @@ describe('Message routes E2E (/api/v1/messages)', () => {
         .post('/api/v1/messages/send')
         .set('Authorization', `Bearer ${senderToken}`)
         .send({
-          recipientId: '00000000-0000-0000-0000-000000000099',
+          recipientId: '00000000-0000-4000-8000-000000000099',
           encryptedContent: 'cipher',
         });
 
@@ -279,7 +288,7 @@ describe('Message routes E2E (/api/v1/messages)', () => {
 
     it('404 → other user does not exist', async () => {
       const res = await request
-        .get('/api/v1/messages/conversations/00000000-0000-0000-0000-000000000099')
+        .get('/api/v1/messages/conversations/00000000-0000-4000-8000-000000000099')
         .set('Authorization', `Bearer ${senderToken}`);
 
       expect(res.status).toBe(404);
@@ -288,6 +297,24 @@ describe('Message routes E2E (/api/v1/messages)', () => {
     it('400 → invalid page param', async () => {
       const res = await request
         .get(`/api/v1/messages/conversations/${recipientId}?page=0`)
+        .set('Authorization', `Bearer ${senderToken}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('400 → malformed UUID in path param returns 400', async () => {
+      const res = await request
+        .get('/api/v1/messages/conversations/not-a-uuid')
+        .set('Authorization', `Bearer ${senderToken}`);
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /public-key/:userId — UUID validation', () => {
+    it('400 → malformed userId returns 400', async () => {
+      const res = await request
+        .get('/api/v1/messages/public-key/not-a-uuid')
         .set('Authorization', `Bearer ${senderToken}`);
 
       expect(res.status).toBe(400);

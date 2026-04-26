@@ -3,6 +3,7 @@
 // RULE: No HTTP references. Throw AppError subclasses only. No .then() chains.
 
 import { prisma } from '../lib/prisma';
+import { Prisma } from '@prisma/client';
 import {
   NotFoundError,
   ForbiddenError,
@@ -20,29 +21,35 @@ export async function followUser(followerId: string, followeeId: string) {
     throw new ValidationError('You cannot follow yourself');
   }
 
+  // Check the followee exists and isn't banned
   const followee = await prisma.user.findUnique({ where: { id: followeeId } });
   if (!followee || followee.isBanned) {
     throw new NotFoundError('User');
   }
 
-  const existing = await prisma.follow.findUnique({
-    where: { followerId_followeeId: { followerId, followeeId } },
-  });
-  if (existing) {
-    throw new ConflictError('Already following this user');
-  }
-
-  await prisma.follow.create({ data: { followerId, followeeId } });
-
+  // Check the follower isn't banned before allowing the action
   const follower = await prisma.user.findUnique({
     where: { id: followerId },
-    select: { username: true },
+    select: { username: true, isBanned: true },
   });
+  if (!follower || follower.isBanned) {
+    throw new ForbiddenError('Banned users cannot follow others');
+  }
+
+  // Use try/catch on create to handle concurrent duplicates (P2002)
+  try {
+    await prisma.follow.create({ data: { followerId, followeeId } });
+  } catch (error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      throw new ConflictError('Already following this user');
+    }
+    throw error;
+  }
 
   await createNotification(
     followeeId,
     'FOLLOW',
-    `${follower!.username} started following you`,
+    `${follower.username} started following you`,
     followerId
   );
 
@@ -229,9 +236,11 @@ export async function deleteComment(commentId: string, userId: string, userRole:
     throw new ForbiddenError('You can only delete your own comments');
   }
 
-  // Delete replies first to avoid FK constraint issues if cascade is not set
-  await prisma.comment.deleteMany({ where: { parentId: commentId } });
-  await prisma.comment.delete({ where: { id: commentId } });
+  // Atomically delete replies and parent to avoid orphaned records
+  await prisma.$transaction([
+    prisma.comment.deleteMany({ where: { parentId: commentId } }),
+    prisma.comment.delete({ where: { id: commentId } }),
+  ]);
 
   return { success: true };
 }

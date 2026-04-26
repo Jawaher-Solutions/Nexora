@@ -226,7 +226,7 @@ export async function likeVideo(userId: string, videoId: string) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictError('Already liked');
       }
-      throw new ValidationError('Unable to like this video right now.');
+      throw error;
     }
 
     return tx.video.update({

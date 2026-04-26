@@ -3,6 +3,24 @@
 
 import { z } from 'zod';
 
+// ─── Shared utilities ─────────────────────────────────────────────────────────
+
+/** Reusable pagination schema — decoupled from notification intent */
+export const paginationQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(50).default(20),
+});
+
+/** Generic commentId path param — not deletion-specific */
+export const commentIdParamSchema = z.object({
+  commentId: z.string().uuid(),
+});
+
+/** Generic userId path param */
+export const userIdParamSchema = z.object({
+  userId: z.string().uuid(),
+});
+
 // ─── Follow ─────────────────────────────────────────────────────────────────
 
 export const followParamSchema = z.object({
@@ -19,10 +37,11 @@ export const addCommentSchema = z.object({
 
 export const getCommentsQuerySchema = z.object({
   videoId: z.string().uuid(),
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce.number().min(1).max(50).optional().default(20),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(50).default(20),
 });
 
+/** @deprecated Use commentIdParamSchema instead */
 export const deleteCommentParamSchema = z.object({
   commentId: z.string().uuid(),
 });
@@ -30,8 +49,8 @@ export const deleteCommentParamSchema = z.object({
 // ─── Notifications ───────────────────────────────────────────────────────────
 
 export const notificationsQuerySchema = z.object({
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce.number().min(1).max(50).optional().default(20),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(50).default(20),
 });
 
 // ─── Messages ────────────────────────────────────────────────────────────────
@@ -43,8 +62,8 @@ export const sendMessageSchema = z.object({
 });
 
 export const getConversationQuerySchema = z.object({
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce.number().min(1).max(100).optional().default(50),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(50),
 });
 
 // ─── Inferred types ──────────────────────────────────────────────────────────

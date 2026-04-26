@@ -24,6 +24,7 @@ vi.mock('bullmq', () => {
 describe('moderation worker logic', () => {
   beforeAll(async () => {
     // Import after mocks are set; it will instantiate the Worker and capture the processor.
+    // @ts-ignore — dynamic import path is valid at runtime; TS language server can't resolve it statically
     await import('../../src/jobs/moderation.worker');
 
     if (!capturedProcessor) {

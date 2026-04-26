@@ -10,6 +10,7 @@ import { NotFoundError, ValidationError } from '../../src/utils/errors';
 
 describe('message.service integration', () => {
   beforeEach(async () => {
+    await prisma.notification.deleteMany();
     await prisma.message.deleteMany();
     await prisma.refreshToken.deleteMany();
     await prisma.user.deleteMany();
@@ -32,7 +33,7 @@ describe('message.service integration', () => {
     it('throws NotFoundError when recipient does not exist', async () => {
       const requester = await createTestUser();
       await expect(
-        getRecipientPublicKey(requester.id, '00000000-0000-0000-0000-000000000099')
+        getRecipientPublicKey(requester.id, '00000000-0000-4000-8000-000000000099')
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
@@ -96,7 +97,7 @@ describe('message.service integration', () => {
       const sender = await createTestUser();
       await expect(
         sendMessage(sender.id, {
-          recipientId: '00000000-0000-0000-0000-000000000099',
+          recipientId: '00000000-0000-4000-8000-000000000099',
           encryptedContent: 'cipher',
         })
       ).rejects.toBeInstanceOf(NotFoundError);
@@ -142,14 +143,22 @@ describe('message.service integration', () => {
       const before = await prisma.message.findFirst({ where: { recipientId: u1.id } });
       expect(before!.isRead).toBe(false);
 
-      // u1 reads the conversation
+      // u1 reads the conversation — the service marks messages read synchronously via .catch handler
       await getConversation(u1.id, u2.id, 1, 10);
 
-      // Allow the fire-and-forget update to settle
-      await new Promise((r) => setTimeout(r, 100));
+      // Allow the updateMany to complete (it runs as a non-awaited Promise)
+      await new Promise((r) => setTimeout(r, 150));
 
       const after = await prisma.message.findFirst({ where: { recipientId: u1.id } });
       expect(after!.isRead).toBe(true);
+    });
+
+    it('throws NotFoundError when peer is banned', async () => {
+      const u1 = await createTestUser();
+      const banned = await createTestUser({ isBanned: true });
+      await expect(
+        getConversation(u1.id, banned.id, 1, 10)
+      ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('returns empty messages when no conversation exists', async () => {
@@ -163,7 +172,7 @@ describe('message.service integration', () => {
     it('throws NotFoundError when the other user does not exist', async () => {
       const u1 = await createTestUser();
       await expect(
-        getConversation(u1.id, '00000000-0000-0000-0000-000000000099', 1, 10)
+        getConversation(u1.id, '00000000-0000-4000-8000-000000000099', 1, 10)
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
@@ -190,14 +199,24 @@ describe('message.service integration', () => {
       const u3 = await createTestUser();
 
       await sendMessage(u1.id, { recipientId: u2.id, encryptedContent: 'to-u2' });
-      // Small delay to ensure different createdAt timestamps
-      await new Promise((r) => setTimeout(r, 10));
       await sendMessage(u1.id, { recipientId: u3.id, encryptedContent: 'to-u3' });
+
+      // Force deterministic ordering by setting explicit timestamps
+      const msgToU2 = await prisma.message.findFirst({ where: { recipientId: u2.id } });
+      const msgToU3 = await prisma.message.findFirst({ where: { recipientId: u3.id } });
+      await prisma.message.update({
+        where: { id: msgToU2!.id },
+        data: { createdAt: new Date('2024-01-01T00:00:00Z') },
+      });
+      await prisma.message.update({
+        where: { id: msgToU3!.id },
+        data: { createdAt: new Date('2024-01-02T00:00:00Z') },
+      });
 
       const result = await getConversationList(u1.id);
 
       expect(result.conversations.length).toBe(2);
-      // Most recent (u3) should appear first
+      // Most recent (u3, 2024-01-02) should appear first
       expect(result.conversations[0].user.id).toBe(u3.id);
       expect(result.conversations[1].user.id).toBe(u2.id);
     });
