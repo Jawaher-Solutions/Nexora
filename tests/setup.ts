@@ -58,6 +58,9 @@ beforeAll(async () => {
 afterAll(async () => {
   try {
     // Child tables first, then parents — strict FK-safe order
+    await prisma.keySession.deleteMany();
+    await prisma.signedPreKeyHistory.deleteMany();
+    await prisma.preKey.deleteMany();
     await prisma.moderationLog.deleteMany();
     await prisma.notification.deleteMany();
     await prisma.flag.deleteMany();

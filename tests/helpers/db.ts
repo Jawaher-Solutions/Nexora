@@ -76,6 +76,9 @@ export async function cleanAll() {
       "Follow",
       "Video",
       "RefreshToken",
+      "KeySession",
+      "SignedPreKeyHistory",
+      "PreKey",
       "User"
     RESTART IDENTITY CASCADE
   `);

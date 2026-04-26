@@ -46,6 +46,11 @@ model User {
   email            String            @unique
   passwordHash     String
   publicKey        String
+  signedPreKeyId        Int?
+  signedPreKeyPublic    String?
+  signedPreKeySignature String?
+  signedPreKeyCreatedAt DateTime?
+  preKeysCount          Int      @default(0)
   avatarUrl        String?
   isVerified       Boolean           @default(false)
   isBanned         Boolean           @default(false)
@@ -65,6 +70,10 @@ model User {
   notifications    Notification[]
   refreshTokens    RefreshToken[]
   moderationLogs   ModerationLog[]
+  preKeys            PreKey[]
+  signedPreKeyHistory SignedPreKeyHistory[]
+  initiatedSessions  KeySession[] @relation("SessionInitiator")
+  receivedSessions   KeySession[] @relation("SessionRecipient")
 }
 
 model Video {
@@ -199,4 +208,41 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model PreKey {
+  id        Int
+  userId    String
+  publicKey String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([id, userId])
+  @@index([userId])
+}
+
+model SignedPreKeyHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  keyId     Int
+  publicKey String
+  signature String
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model KeySession {
+  id               String   @id @default(uuid())
+  initiatorId      String
+  recipientId      String
+  usedPreKeyId     Int?
+  usedSignedPreKeyId Int?
+  establishedAt    DateTime @default(now())
+  initiator        User     @relation("SessionInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  recipient        User     @relation("SessionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([initiatorId, recipientId])
 }
