@@ -1,54 +1,121 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { z } from 'zod';
-import * as adminService from '../services/admin.service';
 import { authenticate } from '../middleware/auth.middleware';
-import { ForbiddenError, ValidationError } from '../utils/errors';
 import { requireRole } from '../middleware/role.middleware';
+import * as adminService from '../services/admin.service';
+import { ValidationError } from '../utils/errors';
+import {
+  adminQueueQuerySchema,
+  reviewVideoSchema,
+  adminUsersQuerySchema,
+  banUserSchema,
+  moderationLogsQuerySchema,
+} from '../validators/admin.validators';
 
-const reviewSchema = z.object({
-  decision: z.enum(['APPROVE', 'REJECT']),
-  notes: z.string().optional(),
-});
+const isModerator = requireRole('MODERATOR', 'ADMIN');
+const isAdmin     = requireRole('ADMIN');
 
 export async function adminRoutes(app: FastifyInstance) {
-  app.addHook('preHandler', authenticate);
-  
-  app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
-    await requireRole('MODERATOR', 'ADMIN')(request, reply);
-  });
-
-  app.get('/queue', async (request: FastifyRequest, reply: FastifyReply) => {
-    const querySchema = z.object({
-      page: z.string().optional().transform(v => Math.max(parseInt(v || '1', 10) || 1, 1))
-    });
-    const { page } = querySchema.parse(request.query);
-    const result = await adminService.getModerationQueue(page);
-    return reply.send({ data: result });
-  });
-
-  app.post('/videos/:id/review', async (request: FastifyRequest, reply: FastifyReply) => {
-    const paramsSchema = z.object({ id: z.string().uuid() });
-    const { id } = paramsSchema.parse(request.params);
-    let body;
+  // GET /queue
+  app.get('/queue', { preHandler: [authenticate, isModerator] }, async (request, reply) => {
     try {
-      body = reviewSchema.parse(request.body);
+      const query = adminQueueQuerySchema.parse(request.query);
+      const result = await adminService.getModerationQueue(query);
+      return reply.send({ success: true, data: result });
     } catch (error: any) {
-      throw new ValidationError(error.issues?.[0]?.message || 'Invalid data');
+      if (error.name === 'ZodError') {
+        throw new ValidationError(error.errors[0]?.message || 'Invalid query parameters');
+      }
+      throw error;
     }
-    const result = await adminService.reviewVideo(id, request.user.userId, body.decision, body.notes);
-    return reply.send({ data: result });
   });
 
-  app.post('/users/:id/ban', async (request: FastifyRequest, reply: FastifyReply) => {
-    const paramsSchema = z.object({ id: z.string().uuid() });
-    const { id } = paramsSchema.parse(request.params);
-    await requireRole('ADMIN')(request, reply);
-    const result = await adminService.banUser(id, request.user.userId);
-    return reply.send({ data: result });
+  // POST /queue/:videoId/review
+  app.post<{ Params: { videoId: string } }>(
+    '/queue/:videoId/review',
+    { preHandler: [authenticate, isModerator] },
+    async (request, reply) => {
+      try {
+        const body = reviewVideoSchema.parse(request.body);
+        const result = await adminService.reviewVideo(request.params.videoId, request.user.userId, body);
+        return reply.send({ success: true, data: result });
+      } catch (error: any) {
+        if (error.name === 'ZodError') {
+          throw new ValidationError(error.errors[0]?.message || 'Invalid body parameters');
+        }
+        throw error;
+      }
+    }
+  );
+
+  // GET /users
+  app.get('/users', { preHandler: [authenticate, isModerator] }, async (request, reply) => {
+    try {
+      const query = adminUsersQuerySchema.parse(request.query);
+      const result = await adminService.getUsers(query);
+      return reply.send({ success: true, data: result });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        throw new ValidationError(error.errors[0]?.message || 'Invalid query parameters');
+      }
+      throw error;
+    }
   });
 
-  app.get('/analytics', async (request: FastifyRequest, reply: FastifyReply) => {
+  // GET /users/:userId
+  app.get<{ Params: { userId: string } }>(
+    '/users/:userId',
+    { preHandler: [authenticate, isModerator] },
+    async (request, reply) => {
+      const result = await adminService.getUserById(request.params.userId);
+      return reply.send({ success: true, data: result });
+    }
+  );
+
+  // POST /users/:userId/ban
+  app.post<{ Params: { userId: string } }>(
+    '/users/:userId/ban',
+    { preHandler: [authenticate, isAdmin] },
+    async (request, reply) => {
+      try {
+        const body = banUserSchema.parse(request.body);
+        const result = await adminService.banUser(request.params.userId, request.user.userId, body);
+        return reply.send({ success: true, data: result });
+      } catch (error: any) {
+        if (error.name === 'ZodError') {
+          throw new ValidationError(error.errors[0]?.message || 'Invalid body parameters');
+        }
+        throw error;
+      }
+    }
+  );
+
+  // POST /users/:userId/unban
+  app.post<{ Params: { userId: string } }>(
+    '/users/:userId/unban',
+    { preHandler: [authenticate, isAdmin] },
+    async (request, reply) => {
+      const result = await adminService.unbanUser(request.params.userId);
+      return reply.send({ success: true, data: result });
+    }
+  );
+
+  // GET /analytics
+  app.get('/analytics', { preHandler: [authenticate, isAdmin] }, async (request, reply) => {
     const result = await adminService.getAnalytics();
-    return reply.send({ data: result });
+    return reply.send({ success: true, data: result });
+  });
+
+  // GET /logs
+  app.get('/logs', { preHandler: [authenticate, isModerator] }, async (request, reply) => {
+    try {
+      const query = moderationLogsQuerySchema.parse(request.query);
+      const result = await adminService.getModerationLogs(query);
+      return reply.send({ success: true, data: result });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        throw new ValidationError(error.errors[0]?.message || 'Invalid query parameters');
+      }
+      throw error;
+    }
   });
 }

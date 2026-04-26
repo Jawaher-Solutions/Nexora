@@ -59,7 +59,9 @@ describe('Social routes E2E (/api/v1/social)', () => {
     await prisma.comment.deleteMany();
     await prisma.follow.deleteMany();
     await prisma.message.deleteMany();
+    await prisma.dislike.deleteMany();
     await prisma.video.deleteMany();
+    await prisma.refreshToken.deleteMany({ where: { userId: { not: userId } } });
     // Keep the main user; only delete extras
     await prisma.user.deleteMany({ where: { id: { not: userId } } });
   });

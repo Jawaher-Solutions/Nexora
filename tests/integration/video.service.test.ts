@@ -210,6 +210,57 @@ describe('video.service integration', () => {
     });
   });
 
+  describe('dislikeVideo / undislikeVideo / shareVideo', () => {
+    it('dislikeVideo increments dislikesCount by 1', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED', dislikesCount: 0 });
+
+      const result = await videoService.dislikeVideo(user.id, video.id);
+      expect(result.disliked).toBe(true);
+      expect(result.dislikesCount).toBe(1);
+    });
+
+    it('dislikeVideo twice throws ConflictError', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED' });
+
+      await videoService.dislikeVideo(user.id, video.id);
+      await expect(videoService.dislikeVideo(user.id, video.id)).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it('undislikeVideo decrements dislikesCount', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED' });
+
+      await videoService.dislikeVideo(user.id, video.id);
+      await videoService.undislikeVideo(user.id, video.id);
+
+      const refreshed = await prisma.video.findUnique({ where: { id: video.id } });
+      expect(refreshed?.dislikesCount).toBe(0);
+    });
+
+    it('undislikeVideo on non-disliked video throws NotFoundError', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED' });
+
+      await expect(videoService.undislikeVideo(user.id, video.id)).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('shareVideo increments sharesCount by 1', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED', sharesCount: 0 });
+
+      const result = await videoService.shareVideo(user.id, video.id);
+      expect(result.shared).toBe(true);
+      expect(result.sharesCount).toBe(1);
+    });
+  });
+
   describe('flagVideo', () => {
     it('creates a Flag record and increments flagsCount', async () => {
       const user = await createTestUser();

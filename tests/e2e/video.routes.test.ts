@@ -25,7 +25,7 @@ import { buildApp } from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
-let request: SuperTest<Test>;
+let request: any;
 let accessToken: string;
 let userId: string;
 
@@ -229,6 +229,67 @@ describe('Video routes E2E', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.liked).toBe(false);
+  });
+
+  it('POST /api/v1/videos/:id/dislike → 200 increments dislike', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.disliked).toBe(true);
+  });
+
+  it('DELETE /api/v1/videos/:id/dislike → 200 decrements dislike', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request
+      .delete(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.disliked).toBe(false);
+  });
+
+  it('POST /api/v1/videos/:id/share → 200 increments share', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/share`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.shared).toBe(true);
   });
 
   it('POST /api/v1/videos/:id/flag → 200 with flagged:true', async () => {

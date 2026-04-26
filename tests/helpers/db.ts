@@ -38,6 +38,8 @@ export async function createTestVideo(
     status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'FLAGGED' | 'PENDING_REVIEW';
     type: 'SHORT' | 'LONG';
     likesCount: number;
+    dislikesCount: number;
+    sharesCount: number;
     flagsCount: number;
   }> = {}
 ) {
@@ -51,6 +53,8 @@ export async function createTestVideo(
       type: overrides.type ?? 'SHORT',
       status: overrides.status ?? 'APPROVED',
       likesCount: overrides.likesCount ?? 0,
+      dislikesCount: overrides.dislikesCount ?? 0,
+      sharesCount: overrides.sharesCount ?? 0,
       flagsCount: overrides.flagsCount ?? 0,
     },
   });

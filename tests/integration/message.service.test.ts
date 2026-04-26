@@ -148,6 +148,7 @@ describe('message.service integration', () => {
       // Allow the fire-and-forget update to settle
       await new Promise((r) => setTimeout(r, 100));
 
+      await new Promise(resolve => setTimeout(resolve, 50));
       const after = await prisma.message.findFirst({ where: { recipientId: u1.id } });
       expect(after!.isRead).toBe(true);
     });

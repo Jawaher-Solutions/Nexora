@@ -54,6 +54,7 @@ model User {
 
   videos           Video[]
   likes            Like[]
+  dislikes         Dislike[]
   comments         Comment[]
   flags            Flag[]
   followers        Follow[]          @relation("Followers")
@@ -78,12 +79,15 @@ model Video {
   type            VideoType
   status          VideoStatus       @default(PENDING)
   likesCount      Int               @default(0)
+  dislikesCount   Int               @default(0)
+  sharesCount     Int               @default(0)
   viewsCount      Int               @default(0)
   flagsCount      Int               @default(0)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
   likes           Like[]
+  dislikes        Dislike[]
   comments        Comment[]
   flags           Flag[]
   moderationLogs  ModerationLog[]
@@ -107,6 +111,16 @@ model Like {
 
   user      User     @relation(fields: [userId], references: [id])
   video     Video    @relation(fields: [videoId], references: [id])
+
+  @@id([userId, videoId])
+}
+
+model Dislike {
+  userId    String
+  videoId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@id([userId, videoId])
 }

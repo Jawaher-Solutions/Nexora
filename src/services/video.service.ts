@@ -313,3 +313,71 @@ export async function flagVideo(userId: string, videoId: string, reason: string)
     flagsCount: updatedVideo.flagsCount,
   };
 }
+
+export async function dislikeVideo(userId: string, videoId: string) {
+  const video = await prisma.video.findUnique({ where: { id: videoId } });
+  if (!video || video.status !== "APPROVED") {
+    throw new NotFoundError("Video");
+  }
+
+  const updatedVideo = await prisma.$transaction(async (tx) => {
+    try {
+      await tx.dislike.create({ data: { userId, videoId } });
+    } catch (error: unknown) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictError("Already disliked");
+      }
+      throw error;
+    }
+    return tx.video.update({
+      where: { id: videoId },
+      data: { dislikesCount: { increment: 1 } },
+    });
+  });
+
+  return { disliked: true, dislikesCount: updatedVideo.dislikesCount };
+}
+
+export async function undislikeVideo(userId: string, videoId: string) {
+  await prisma.$transaction(async (tx) => {
+    const result = await tx.dislike.deleteMany({
+      where: { userId, videoId },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundError("Dislike");
+    }
+
+    const current = await tx.video.findUnique({
+      where: { id: videoId },
+      select: { dislikesCount: true },
+    });
+
+    if (!current) {
+      throw new NotFoundError('Video');
+    }
+
+    await tx.video.update({
+      where: { id: videoId },
+      data: {
+        dislikesCount: Math.max(current.dislikesCount - 1, 0),
+      },
+    });
+  });
+
+  return { disliked: false };
+}
+
+export async function shareVideo(userId: string, videoId: string) {
+  const video = await prisma.video.findUnique({ where: { id: videoId } });
+  if (!video || video.status !== "APPROVED") {
+    throw new NotFoundError("Video");
+  }
+
+  const updatedVideo = await prisma.video.update({
+    where: { id: videoId },
+    data: { sharesCount: { increment: 1 } },
+  });
+
+  return { shared: true, sharesCount: updatedVideo.sharesCount };
+}
