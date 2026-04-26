@@ -6,14 +6,12 @@ import {
   getConversationList,
 } from '../../src/services/message.service';
 import { createTestUser } from '../helpers/db';
+import { cleanAll } from '../helpers/db';
 import { NotFoundError, ValidationError } from '../../src/utils/errors';
 
 describe('message.service integration', () => {
   beforeEach(async () => {
-    await prisma.notification.deleteMany();
-    await prisma.message.deleteMany();
-    await prisma.refreshToken.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
   });
 
   // ─── getRecipientPublicKey ────────────────────────────────────────────────────
@@ -146,10 +144,12 @@ describe('message.service integration', () => {
       // u1 reads the conversation — the service marks messages read synchronously via .catch handler
       await getConversation(u1.id, u2.id, 1, 10);
 
-      // Allow the updateMany to complete (it runs as a non-awaited Promise)
-      await new Promise((r) => setTimeout(r, 150));
-
-      const after = await prisma.message.findFirst({ where: { recipientId: u1.id } });
+      let after = await prisma.message.findFirst({ where: { recipientId: u1.id } });
+      const startTime = Date.now();
+      while (!after!.isRead && Date.now() - startTime < 2000) {
+        await new Promise((r) => setTimeout(r, 50));
+        after = await prisma.message.findFirst({ where: { recipientId: u1.id } });
+      }
       expect(after!.isRead).toBe(true);
     });
 

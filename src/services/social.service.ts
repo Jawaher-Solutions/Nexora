@@ -46,12 +46,16 @@ export async function followUser(followerId: string, followeeId: string) {
     throw error;
   }
 
-  await createNotification(
-    followeeId,
-    'FOLLOW',
-    `${follower.username} started following you`,
-    followerId
-  );
+  try {
+    await createNotification(
+      followeeId,
+      'FOLLOW',
+      `${follower.username} started following you`,
+      followerId
+    );
+  } catch (err) {
+    console.error('[social.service] Failed to create FOLLOW notification', err);
+  }
 
   return { following: true };
 }
@@ -147,16 +151,16 @@ export async function addComment(userId: string, input: AddCommentInput) {
   });
 
   if (video.userId !== userId) {
-    const commenter = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { username: true },
-    });
-    await createNotification(
-      video.userId,
-      'COMMENT',
-      `${commenter!.username} commented on your video`,
-      video.id
-    );
+    try {
+      await createNotification(
+        video.userId,
+        'COMMENT',
+        `${comment.user.username} commented on your video`,
+        video.id
+      );
+    } catch (err) {
+      console.error('[social.service] Failed to create COMMENT notification', err);
+    }
   }
 
   return comment;
@@ -236,11 +240,7 @@ export async function deleteComment(commentId: string, userId: string, userRole:
     throw new ForbiddenError('You can only delete your own comments');
   }
 
-  // Atomically delete replies and parent to avoid orphaned records
-  await prisma.$transaction([
-    prisma.comment.deleteMany({ where: { parentId: commentId } }),
-    prisma.comment.delete({ where: { id: commentId } }),
-  ]);
+  await prisma.comment.delete({ where: { id: commentId } });
 
   return { success: true };
 }

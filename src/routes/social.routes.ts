@@ -90,7 +90,7 @@ export async function socialRoutes(app: FastifyInstance) {
   // ── Notifications ─────────────────────────────────────────────────────────
 
   app.get('/notifications', { preHandler: [authenticate] }, async (request, reply) => {
-    const query = parseOrThrow(notificationsQuerySchema, request.query);
+    const query = parseOrThrow(paginationQuerySchema, request.query);
     const result = await getNotifications(request.user.userId, query.page, query.limit);
     return reply.code(200).send({ success: true, data: result });
   });

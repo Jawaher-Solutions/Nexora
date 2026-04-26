@@ -1,12 +1,8 @@
-import supertest, { SuperTest, Test } from 'supertest';
+import supertest from 'supertest';
 
 // Prevent starting background workers during E2E.
 vi.mock('../../src/jobs', () => ({
   startWorkers: () => {},
-}));
-
-vi.mock('../../src/jobs/moderation.worker', () => ({
-  moderationWorker: { on: vi.fn() },
 }));
 
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
@@ -72,6 +68,7 @@ describe('Video routes E2E', () => {
     await prisma.moderationLog.deleteMany();
     await prisma.notification.deleteMany();
     await prisma.flag.deleteMany();
+    await prisma.dislike.deleteMany();
     await prisma.like.deleteMany();
     await prisma.video.deleteMany();
   });
@@ -233,6 +230,153 @@ describe('Video routes E2E', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.liked).toBe(false);
+  });
+
+  it('POST /api/v1/videos/:id/dislike → 200 increments dislike', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.disliked).toBe(true);
+    expect(res.body.data.dislikesCount).toBe(1);
+  });
+
+  it('POST /api/v1/videos/:id/dislike → 401 without token', async () => {
+    const res = await request.post('/api/v1/videos/123/dislike');
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /api/v1/videos/:id/dislike → 404 non-APPROVED video', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'PENDING',
+      },
+    });
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /api/v1/videos/:id/dislike → 409 on double dislike', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(409);
+  });
+
+  it('DELETE /api/v1/videos/:id/dislike → 200 decrements dislike', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request
+      .delete(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.disliked).toBe(false);
+    expect(res.body.data.dislikesCount).toBe(0);
+
+    // Verify it stays floored at 0 if the counter was out of sync
+    await prisma.video.update({ where: { id: video.id }, data: { dislikesCount: 0 } });
+    await prisma.dislike.create({ data: { userId, videoId: video.id } });
+    
+    const res2 = await request
+      .delete(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+      
+    expect(res2.status).toBe(200);
+    expect(res2.body.data.dislikesCount).toBe(0);
+  });
+
+  it('POST /api/v1/videos/:id/share → 200 increments share', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/share`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.shared).toBe(true);
+    expect(res.body.data.sharesCount).toBe(1);
+  });
+
+  it('POST /api/v1/videos/:id/share → 401 without token', async () => {
+    const res = await request.post('/api/v1/videos/123/share');
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /api/v1/videos/:id/share → 409 rate limit exceeded', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    await request
+      .post(`/api/v1/videos/${video.id}/share`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/share`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(409);
   });
 
   it('POST /api/v1/videos/:id/flag → 200 with flagged:true', async () => {

@@ -1,8 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { prisma } from '../../src/lib/prisma';
+import { redis } from '../../src/lib/redis';
 import * as videoService from '../../src/services/video.service';
-import { createTestUser, createTestVideo } from '../helpers/db';
+import { createTestUser, createTestVideo, cleanAll } from '../helpers/db';
 import {
   ConflictError,
   ForbiddenError,
@@ -32,14 +33,8 @@ describe('video.service integration', () => {
     sendMock.mockReset();
     addModerationJobMock.mockClear();
 
-    await prisma.moderationLog.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.flag.deleteMany();
-    await prisma.like.deleteMany();
-    await prisma.follow.deleteMany();
-    await prisma.video.deleteMany();
-    await prisma.refreshToken.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
+    await redis.flushdb();
   });
 
   describe('requestUpload', () => {
@@ -207,6 +202,92 @@ describe('video.service integration', () => {
       const video = await createTestVideo(owner.id, { status: 'APPROVED' });
 
       await expect(videoService.unlikeVideo(user.id, video.id)).rejects.toBeInstanceOf(NotFoundError);
+    });
+  });
+
+  describe('dislikeVideo / undislikeVideo / shareVideo', () => {
+    it('dislikeVideo increments dislikesCount by 1', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED', dislikesCount: 0 });
+
+      const result = await videoService.dislikeVideo(user.id, video.id);
+      expect(result.disliked).toBe(true);
+      expect(result.dislikesCount).toBe(1);
+    });
+
+    it('dislikeVideo twice throws ConflictError', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED' });
+
+      await videoService.dislikeVideo(user.id, video.id);
+      await expect(videoService.dislikeVideo(user.id, video.id)).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it('undislikeVideo decrements dislikesCount', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED' });
+
+      await videoService.dislikeVideo(user.id, video.id);
+      await videoService.undislikeVideo(user.id, video.id);
+
+      const refreshed = await prisma.video.findUnique({ where: { id: video.id } });
+      expect(refreshed?.dislikesCount).toBe(0);
+    });
+
+    it('undislikeVideo on non-disliked video throws NotFoundError', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED' });
+
+      await expect(videoService.undislikeVideo(user.id, video.id)).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('dislikeVideo rejects for a non-APPROVED video', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'PENDING' });
+
+      await expect(videoService.dislikeVideo(user.id, video.id)).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('shareVideo verifies share persistence', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED', sharesCount: 0 });
+
+      await videoService.shareVideo(user.id, video.id);
+      const refreshed = await prisma.video.findUnique({ where: { id: video.id } });
+      expect(refreshed?.sharesCount).toBe(1);
+    });
+
+    it('shareVideo increments sharesCount by 1', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED', sharesCount: 0 });
+
+      const result = await videoService.shareVideo(user.id, video.id);
+      expect(result.shared).toBe(true);
+      expect(result.sharesCount).toBe(1);
+    });
+
+    it('shareVideo on PENDING video throws NotFoundError', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'PENDING' });
+
+      await expect(videoService.shareVideo(user.id, video.id)).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('shareVideo twice within 60s throws ConflictError', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED', sharesCount: 0 });
+
+      await videoService.shareVideo(user.id, video.id);
+      await expect(videoService.shareVideo(user.id, video.id)).rejects.toBeInstanceOf(ConflictError);
     });
   });
 

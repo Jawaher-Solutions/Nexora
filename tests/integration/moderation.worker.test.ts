@@ -1,5 +1,5 @@
 import { prisma } from '../../src/lib/prisma';
-import { createTestUser, createTestVideo } from '../helpers/db';
+import { createTestUser, createTestVideo, cleanAll } from '../helpers/db';
 
 let capturedProcessor: undefined | ((job: { data: { videoId: string } }) => Promise<void>);
 
@@ -24,7 +24,7 @@ vi.mock('bullmq', () => {
 describe('moderation worker logic', () => {
   beforeAll(async () => {
     // Import after mocks are set; it will instantiate the Worker and capture the processor.
-    // @ts-ignore — dynamic import path is valid at runtime; TS language server can't resolve it statically
+    // @ts-ignore
     await import('../../src/jobs/moderation.worker');
 
     if (!capturedProcessor) {
@@ -35,10 +35,7 @@ describe('moderation worker logic', () => {
   beforeEach(async () => {
     analyzeContentMock.mockReset();
 
-    await prisma.moderationLog.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.video.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
   });
 
   it('auto-approves video when maxScore < 40', async () => {
@@ -80,6 +77,9 @@ describe('moderation worker logic', () => {
 
     const log = await prisma.moderationLog.findFirst({ where: { videoId: video.id } });
     expect(log?.decision).toBe('ESCALATED');
+
+    const notif = await prisma.notification.findFirst({ where: { userId: user.id } });
+    expect(notif?.message).toContain('nudity: 50%');
   });
 
   it('auto-rejects video when maxScore >= 70', async () => {
@@ -99,6 +99,9 @@ describe('moderation worker logic', () => {
 
     const log = await prisma.moderationLog.findFirst({ where: { videoId: video.id } });
     expect(log?.decision).toBe('AUTO_REJECTED');
+
+    const notif = await prisma.notification.findFirst({ where: { userId: user.id } });
+    expect(notif?.message).toContain('nudity: 90%');
   });
 
   it('skips already-processed videos', async () => {

@@ -11,6 +11,7 @@ vi.mock('../../src/jobs/moderation.worker', () => ({
 
 import { buildApp } from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
+import { cleanAll } from '../helpers/db';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
 let request: ReturnType<typeof supertest>;
@@ -27,16 +28,7 @@ describe('POST /api/v1/auth/* (E2E)', () => {
   });
 
   beforeEach(async () => {
-    await prisma.moderationLog.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.flag.deleteMany();
-    await prisma.like.deleteMany();
-    await prisma.comment.deleteMany();
-    await prisma.message.deleteMany();
-    await prisma.follow.deleteMany();
-    await prisma.video.deleteMany();
-    await prisma.refreshToken.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
   });
 
   it('POST /register → 201 with user and tokens', async () => {

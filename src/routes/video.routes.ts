@@ -11,6 +11,9 @@ import {
   likeVideo,
   requestUpload,
   unlikeVideo,
+  dislikeVideo,
+  undislikeVideo,
+  shareVideo,
 } from '../services/video.service';
 import {
   confirmUploadSchema,
@@ -112,6 +115,24 @@ export async function videoRoutes(app: FastifyInstance) {
     }
 
     const result = await flagVideo(request.user.userId, params.videoId, body.reason);
+    return reply.code(200).send({ success: true, data: result });
+  });
+
+  app.post('/:videoId/dislike', { preHandler: [authenticate] }, async (request, reply) => {
+    const params = request.params as { videoId: string };
+    const result = await dislikeVideo(request.user.userId, params.videoId);
+    return reply.code(200).send({ success: true, data: result });
+  });
+
+  app.delete('/:videoId/dislike', { preHandler: [authenticate] }, async (request, reply) => {
+    const params = request.params as { videoId: string };
+    const result = await undislikeVideo(request.user.userId, params.videoId);
+    return reply.code(200).send({ success: true, data: result });
+  });
+
+  app.post('/:videoId/share', { preHandler: [authenticate] }, async (request, reply) => {
+    const params = request.params as { videoId: string };
+    const result = await shareVideo(request.user.userId, params.videoId);
     return reply.code(200).send({ success: true, data: result });
   });
 }

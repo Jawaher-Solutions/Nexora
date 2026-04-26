@@ -11,6 +11,7 @@ import { env } from '../config/env';
 import { FLAG_THRESHOLD } from '../config/constants';
 import { prisma } from '../lib/prisma';
 import { r2 } from '../lib/r2';
+import { redis } from '../lib/redis';
 import { addModerationJob } from '../jobs/queues';
 import {
   ConflictError,
@@ -223,7 +224,7 @@ export async function likeVideo(userId: string, videoId: string) {
         data: { userId, videoId },
       });
     } catch (error: unknown) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
         throw new ConflictError('Already liked');
       }
       throw error;
@@ -312,4 +313,87 @@ export async function flagVideo(userId: string, videoId: string, reason: string)
     flagged: true,
     flagsCount: updatedVideo.flagsCount,
   };
+}
+
+export async function dislikeVideo(userId: string, videoId: string) {
+  const updatedVideo = await prisma.$transaction(async (tx) => {
+    const currentVideo = await tx.video.findUnique({ where: { id: videoId }, select: { status: true } });
+    if (!currentVideo || currentVideo.status !== "APPROVED") {
+      throw new NotFoundError("Video");
+    }
+
+    try {
+      await tx.dislike.create({ data: { userId, videoId } });
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+        throw new ConflictError("Already disliked");
+      }
+      throw error;
+    }
+    return tx.video.update({
+      where: { id: videoId },
+      data: { dislikesCount: { increment: 1 } },
+    });
+  });
+
+  return { disliked: true, dislikesCount: updatedVideo.dislikesCount };
+}
+
+export async function undislikeVideo(userId: string, videoId: string) {
+  const updatedDislikesCount = await prisma.$transaction(async (tx) => {
+    const result = await tx.dislike.deleteMany({
+      where: { userId, videoId },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundError("Dislike");
+    }
+
+    const current = await tx.video.findUnique({
+      where: { id: videoId },
+      select: { dislikesCount: true },
+    });
+
+    if (!current) {
+      throw new NotFoundError('Video');
+    }
+
+    const updated = await tx.video.update({
+      where: { id: videoId },
+      data: {
+        dislikesCount: Math.max(current.dislikesCount - 1, 0),
+      },
+      select: { dislikesCount: true },
+    });
+
+    return updated.dislikesCount;
+  });
+
+  return { disliked: false, dislikesCount: updatedDislikesCount };
+}
+
+export async function shareVideo(userId: string, videoId: string) {
+  const rateLimitKey = `share:${userId}:${videoId}`;
+  const acquired = await redis.set(rateLimitKey, '1', 'PX', 60000, 'NX');
+  
+  if (!acquired) {
+    throw new ConflictError("Rate limit exceeded for sharing this video");
+  }
+
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { id: true, status: true },
+  });
+  
+  if (!video || video.status !== "APPROVED") {
+    await redis.del(rateLimitKey);
+    throw new NotFoundError("Video");
+  }
+
+  const updatedVideo = await prisma.video.update({
+    where: { id: videoId },
+    data: { sharesCount: { increment: 1 } },
+  });
+
+  return { shared: true, sharesCount: updatedVideo.sharesCount };
 }

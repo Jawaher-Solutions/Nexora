@@ -261,10 +261,19 @@ describe('Message routes E2E (/api/v1/messages)', () => {
         .set('Authorization', `Bearer ${senderToken}`)
         .send({ recipientId, encryptedContent: 'first' });
 
+      await new Promise(resolve => setTimeout(resolve, 50));
+
       await request
         .post('/api/v1/messages/send')
         .set('Authorization', `Bearer ${senderToken}`)
         .send({ recipientId, encryptedContent: 'second' });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      await request
+        .post('/api/v1/messages/send')
+        .set('Authorization', `Bearer ${senderToken}`)
+        .send({ recipientId, encryptedContent: 'third' });
 
       const res = await request
         .get(`/api/v1/messages/conversations/${recipientId}?limit=10`)
@@ -274,7 +283,9 @@ describe('Message routes E2E (/api/v1/messages)', () => {
       const times = res.body.data.messages.map((m: { createdAt: string }) =>
         new Date(m.createdAt).getTime()
       );
-      expect(times).toEqual([...times].sort((a, b) => a - b));
+      expect(times.length).toBe(3);
+      expect(times[0]).toBeLessThan(times[1]);
+      expect(times[1]).toBeLessThan(times[2]);
     });
 
     it('200 → empty conversation with a user who has no messages', async () => {

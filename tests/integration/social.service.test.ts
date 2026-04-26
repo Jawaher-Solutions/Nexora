@@ -11,7 +11,7 @@ import {
   getNotifications,
   markNotificationsRead,
 } from '../../src/services/social.service';
-import { createTestUser, createTestVideo } from '../helpers/db';
+import { createTestUser, createTestVideo, cleanAll } from '../helpers/db';
 import {
   NotFoundError,
   ConflictError,
@@ -21,12 +21,7 @@ import {
 
 describe('social.service integration', () => {
   beforeEach(async () => {
-    await prisma.notification.deleteMany();
-    await prisma.comment.deleteMany();
-    await prisma.follow.deleteMany();
-    await prisma.video.deleteMany();
-    await prisma.refreshToken.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
   });
 
   // ─── followUser ─────────────────────────────────────────────────────────────

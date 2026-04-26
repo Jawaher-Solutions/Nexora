@@ -8,6 +8,7 @@ import { ValidationError } from '../utils/errors';
 
 const AUTO_APPROVE_THRESHOLD = MODERATION.AUTO_APPROVE_THRESHOLD;
 const AUTO_REJECT_THRESHOLD = MODERATION.AUTO_REJECT_THRESHOLD;
+const FINDINGS_SIGNIFICANCE_THRESHOLD = 20;
 
 type ModerationJobData = {
   videoId: string;
@@ -125,13 +126,24 @@ export const moderationWorker = new Worker(
       }),
     ]);
 
-    let message = 'Your video is currently under review by our moderation team.';
+    // Build a human-readable breakdown of what the AI found
+    const findings = Object.entries(scores)
+      .filter(([_, score]) => score >= FINDINGS_SIGNIFICANCE_THRESHOLD)
+      .map(([category, score]) => `${category}: ${score}%`)
+      .join(", ");
 
-    if (decision === 'AUTO_APPROVED') {
-      message = 'Your video is live! It has been approved and is now visible to your followers.';
-    } else if (decision === 'AUTO_REJECTED') {
-      message = 'Your video was removed for violating our community guidelines.';
-    }
+    const findingsSuffix = findings
+      ? ` Detected content: ${findings}.`
+      : "";
+
+    // Replace existing notification messages:
+    const notificationMessages: Record<string, string> = {
+      AUTO_APPROVED: "Your video has been reviewed by our AI system and approved. It is now live!",
+      AUTO_REJECTED: `Your video was automatically removed for violating our community guidelines.${findingsSuffix} If you believe this is a mistake, please contact support.`,
+      ESCALATED:     `Your video is currently under manual review by our moderation team.${findingsSuffix} You will be notified once the review is complete.`,
+    };
+
+    const message = notificationMessages[decision];
 
     await createNotification(video.userId, 'MODERATION', message, videoId);
 
