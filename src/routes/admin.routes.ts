@@ -4,20 +4,16 @@ import { ZodError } from 'zod';
 import { requireRole } from '../middleware/role.middleware';
 import * as adminService from '../services/admin.service';
 import { ValidationError } from '../utils/errors';
+import { parseOrThrow } from '../utils/parseOrThrow';
+import { userIdParamSchema } from '../validators/social.validators';
 import {
   adminQueueQuerySchema,
   reviewVideoSchema,
   adminUsersQuerySchema,
   banUserSchema,
   moderationLogsQuerySchema,
+  videoIdParamSchema,
 } from '../validators/admin.validators';
-
-function toValidationError(error: unknown) {
-  if (error instanceof ZodError) {
-    throw new ValidationError(error.issues.map((i) => i.message).join(', '));
-  }
-  throw error;
-}
 
 const isModerator = requireRole('MODERATOR', 'ADMIN');
 const isAdmin     = requireRole('ADMIN');
@@ -25,13 +21,9 @@ const isAdmin     = requireRole('ADMIN');
 export async function adminRoutes(app: FastifyInstance) {
   // GET /queue
   app.get('/queue', { preHandler: [authenticate, isModerator] }, async (request, reply) => {
-    try {
-      const query = adminQueueQuerySchema.parse(request.query);
-      const result = await adminService.getModerationQueue(query);
-      return reply.send({ success: true, data: result });
-    } catch (error: unknown) {
-      toValidationError(error);
-    }
+    const query = parseOrThrow(adminQueueQuerySchema, request.query);
+    const result = await adminService.getModerationQueue(query);
+    return reply.send({ success: true, data: result });
   });
 
   // POST /queue/:videoId/review
@@ -39,25 +31,18 @@ export async function adminRoutes(app: FastifyInstance) {
     '/queue/:videoId/review',
     { preHandler: [authenticate, isModerator] },
     async (request, reply) => {
-      try {
-        const body = reviewVideoSchema.parse(request.body);
-        const result = await adminService.reviewVideo(request.params.videoId, request.user.userId, body);
-        return reply.send({ success: true, data: result });
-      } catch (error: unknown) {
-        toValidationError(error);
-      }
+      const { videoId } = parseOrThrow(videoIdParamSchema, request.params);
+      const body = parseOrThrow(reviewVideoSchema, request.body);
+      const result = await adminService.reviewVideo(videoId, request.user.userId, body);
+      return reply.send({ success: true, data: result });
     }
   );
 
   // GET /users
   app.get('/users', { preHandler: [authenticate, isModerator] }, async (request, reply) => {
-    try {
-      const query = adminUsersQuerySchema.parse(request.query);
-      const result = await adminService.getUsers(query);
-      return reply.send({ success: true, data: result });
-    } catch (error: unknown) {
-      toValidationError(error);
-    }
+    const query = parseOrThrow(adminUsersQuerySchema, request.query);
+    const result = await adminService.getUsers(query);
+    return reply.send({ success: true, data: result });
   });
 
   // GET /users/:userId
@@ -65,7 +50,8 @@ export async function adminRoutes(app: FastifyInstance) {
     '/users/:userId',
     { preHandler: [authenticate, isModerator] },
     async (request, reply) => {
-      const result = await adminService.getUserById(request.params.userId);
+      const { userId } = parseOrThrow(userIdParamSchema, request.params);
+      const result = await adminService.getUserById(userId);
       return reply.send({ success: true, data: result });
     }
   );
@@ -75,13 +61,10 @@ export async function adminRoutes(app: FastifyInstance) {
     '/users/:userId/ban',
     { preHandler: [authenticate, isAdmin] },
     async (request, reply) => {
-      try {
-        const body = banUserSchema.parse(request.body);
-        const result = await adminService.banUser(request.params.userId, request.user.userId, body);
-        return reply.send({ success: true, data: result });
-      } catch (error: unknown) {
-        toValidationError(error);
-      }
+      const { userId } = parseOrThrow(userIdParamSchema, request.params);
+      const body = parseOrThrow(banUserSchema, request.body);
+      const result = await adminService.banUser(userId, request.user.userId, body);
+      return reply.send({ success: true, data: result });
     }
   );
 
@@ -90,7 +73,8 @@ export async function adminRoutes(app: FastifyInstance) {
     '/users/:userId/unban',
     { preHandler: [authenticate, isAdmin] },
     async (request, reply) => {
-      const result = await adminService.unbanUser(request.params.userId);
+      const { userId } = parseOrThrow(userIdParamSchema, request.params);
+      const result = await adminService.unbanUser(userId);
       return reply.send({ success: true, data: result });
     }
   );
@@ -103,12 +87,8 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // GET /logs
   app.get('/logs', { preHandler: [authenticate, isModerator] }, async (request, reply) => {
-    try {
-      const query = moderationLogsQuerySchema.parse(request.query);
-      const result = await adminService.getModerationLogs(query);
-      return reply.send({ success: true, data: result });
-    } catch (error: unknown) {
-      toValidationError(error);
-    }
+    const query = parseOrThrow(moderationLogsQuerySchema, request.query);
+    const result = await adminService.getModerationLogs(query);
+    return reply.send({ success: true, data: result });
   });
 }

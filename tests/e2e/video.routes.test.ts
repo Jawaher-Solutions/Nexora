@@ -24,7 +24,7 @@ vi.mock('../../src/jobs/queues', () => ({
 import { buildApp } from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
 
-let app: any;
+let app: Awaited<ReturnType<typeof buildApp>>;
 let request: ReturnType<typeof supertest>;
 let accessToken: string;
 let userId: string;
@@ -68,6 +68,7 @@ describe('Video routes E2E', () => {
     await prisma.moderationLog.deleteMany();
     await prisma.notification.deleteMany();
     await prisma.flag.deleteMany();
+    await prisma.dislike.deleteMany();
     await prisma.like.deleteMany();
     await prisma.video.deleteMany();
   });
@@ -251,6 +252,51 @@ describe('Video routes E2E', () => {
     expect(res.body.data.dislikesCount).toBe(1);
   });
 
+  it('POST /api/v1/videos/:id/dislike → 401 without token', async () => {
+    const res = await request.post('/api/v1/videos/123/dislike');
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /api/v1/videos/:id/dislike → 404 non-APPROVED video', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'PENDING',
+      },
+    });
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /api/v1/videos/:id/dislike → 409 on double dislike', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/dislike`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(409);
+  });
+
   it('DELETE /api/v1/videos/:id/dislike → 200 decrements dislike', async () => {
     const video = await prisma.video.create({
       data: {
@@ -304,6 +350,33 @@ describe('Video routes E2E', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.shared).toBe(true);
     expect(res.body.data.sharesCount).toBe(1);
+  });
+
+  it('POST /api/v1/videos/:id/share → 401 without token', async () => {
+    const res = await request.post('/api/v1/videos/123/share');
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /api/v1/videos/:id/share → 409 rate limit exceeded', async () => {
+    const video = await prisma.video.create({
+      data: {
+        userId,
+        storageKey: `videos/${userId}/a.mp4`,
+        durationSeconds: 10,
+        type: 'SHORT',
+        status: 'APPROVED',
+      },
+    });
+
+    await request
+      .post(`/api/v1/videos/${video.id}/share`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request
+      .post(`/api/v1/videos/${video.id}/share`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(409);
   });
 
   it('POST /api/v1/videos/:id/flag → 200 with flagged:true', async () => {

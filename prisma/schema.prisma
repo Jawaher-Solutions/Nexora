@@ -37,6 +37,7 @@ enum ModerationDecision {
   ESCALATED
   HUMAN_APPROVED
   HUMAN_REJECTED
+  HUMAN_RESTRICTED
 }
 
 model User {
@@ -119,6 +120,7 @@ model Dislike {
   userId    String
   videoId   String
   createdAt DateTime @default(now())
+
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
@@ -136,7 +138,7 @@ model Comment {
 
   user      User      @relation(fields: [userId], references: [id])
   video     Video     @relation(fields: [videoId], references: [id])
-  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies   Comment[] @relation("CommentReplies")
 }
 

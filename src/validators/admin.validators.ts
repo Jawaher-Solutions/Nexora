@@ -3,6 +3,12 @@
 
 import { z } from 'zod';
 
+// ─── Path Params ──────────────────────────────────────────────────────────────
+
+export const videoIdParamSchema = z.object({
+  videoId: z.string().uuid('Invalid video ID format'),
+});
+
 // ─── Review Video ─────────────────────────────────────────────────────────────
 
 export const reviewVideoSchema = z.object({

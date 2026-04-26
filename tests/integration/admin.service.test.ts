@@ -1,15 +1,11 @@
 import { prisma } from '../../src/lib/prisma';
 import * as adminService from '../../src/services/admin.service';
-import { createTestUser, createTestVideo } from '../helpers/db';
+import { createTestUser, createTestVideo, cleanAll } from '../helpers/db';
 import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from '../../src/utils/errors';
 
 describe('admin.service integration', () => {
   beforeEach(async () => {
-    await prisma.moderationLog.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.video.deleteMany();
-    await prisma.refreshToken.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
   });
 
   describe('getModerationQueue', () => {

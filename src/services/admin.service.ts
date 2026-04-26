@@ -1,7 +1,7 @@
 // services/admin.service.ts
 // Admin & Moderation service layer. No HTTP references. Throws AppError subclasses only.
 
-import { Prisma } from '@prisma/client';
+import { Prisma, ModerationDecision } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from '../utils/errors';
 import { createNotification } from './notification.service';
@@ -77,7 +77,7 @@ export async function reviewVideo(
 
   // Map decision to DB enums
   let newStatus:   'APPROVED' | 'REJECTED' | 'FLAGGED';
-  let logDecision: 'HUMAN_APPROVED' | 'HUMAN_REJECTED';
+  let logDecision: 'HUMAN_APPROVED' | 'HUMAN_REJECTED' | 'HUMAN_RESTRICTED';
 
   switch (input.decision) {
     case 'approve':
@@ -90,7 +90,7 @@ export async function reviewVideo(
       break;
     case 'restrict':
       newStatus   = 'FLAGGED';
-      logDecision = 'HUMAN_REJECTED';
+      logDecision = 'HUMAN_RESTRICTED';
       break;
   }
 
@@ -103,7 +103,7 @@ export async function reviewVideo(
       data: {
         videoId,
         moderatorId,
-        decision:   logDecision,
+        decision:   logDecision as ModerationDecision,
         humanNotes: input.notes ?? null,
       },
     }),
@@ -116,7 +116,7 @@ export async function reviewVideo(
 
   // Replace existing notification messages map:
   const notificationMessages: Record<string, string> = {
-    approve:  "Your video has been manually reviewed and approved by our moderation team. It is now live!",
+    approve:  `Your video has been manually reviewed and approved by our moderation team. It is now live!${notesSuffix}`,
     reject:   `Your video was reviewed and removed for violating our community guidelines.${notesSuffix}`,
     restrict: `Your video has been restricted following a moderation review.${notesSuffix} It is no longer publicly visible.`,
   };

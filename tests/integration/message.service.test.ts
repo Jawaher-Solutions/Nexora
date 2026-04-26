@@ -6,14 +6,12 @@ import {
   getConversationList,
 } from '../../src/services/message.service';
 import { createTestUser } from '../helpers/db';
+import { cleanAll } from '../helpers/db';
 import { NotFoundError, ValidationError } from '../../src/utils/errors';
 
 describe('message.service integration', () => {
   beforeEach(async () => {
-    await prisma.notification.deleteMany();
-    await prisma.message.deleteMany();
-    await prisma.refreshToken.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
   });
 
   // ─── getRecipientPublicKey ────────────────────────────────────────────────────

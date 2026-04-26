@@ -5,13 +5,20 @@ import { vi } from 'vitest';
 
 // Prevent real Redis connections during tests.
 vi.mock('../src/lib/redis', () => {
+  const store = new Map<string, string>();
+
   const mockRedis = {
     quit: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn(),
     on: vi.fn(),
-    get: vi.fn(),
-    set: vi.fn(),
-    del: vi.fn(),
+    get: vi.fn().mockImplementation(async (k) => store.get(k) || null),
+    set: vi.fn().mockImplementation(async (k, v, ...args) => {
+      if (args.includes('NX') && store.has(k)) return null;
+      store.set(k, v);
+      return 'OK';
+    }),
+    del: vi.fn().mockImplementation(async (k) => store.delete(k)),
+    flushdb: vi.fn().mockImplementation(async () => store.clear()),
     xadd: vi.fn(),
     getMaxListeners: vi.fn().mockReturnValue(10),
     setMaxListeners: vi.fn(),

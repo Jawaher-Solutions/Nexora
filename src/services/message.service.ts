@@ -127,71 +127,77 @@ export async function getConversation(
 // ─── Conversation List ────────────────────────────────────────────────────────
 
 export async function getConversationList(userId: string, page = 1, limit = 20) {
-  const [sentTo, receivedFrom] = await Promise.all([
-    prisma.message.findMany({
-      where: { senderId: userId },
-      select: { recipientId: true },
-      distinct: ['recipientId'],
-    }),
-    prisma.message.findMany({
-      where: { recipientId: userId },
-      select: { senderId: true },
-      distinct: ['senderId'],
-    }),
-  ]);
-
-  // Build a deduplicated set of peer user IDs, excluding self
-  const peerIds = new Set<string>();
-  for (const m of sentTo) {
-    if (m.recipientId !== userId) peerIds.add(m.recipientId);
-  }
-  for (const m of receivedFrom) {
-    if (m.senderId !== userId) peerIds.add(m.senderId);
-  }
-
-  // Apply pagination to the peer list
-  const allPeerIds = Array.from(peerIds);
-  const total = allPeerIds.length;
   const skip = (page - 1) * limit;
-  const pagedPeerIds = allPeerIds.slice(skip, skip + limit);
 
-  const conversationEntries = await Promise.all(
-    pagedPeerIds.map(async (peerId) => {
-      const [user, lastMessage] = await Promise.all([
-        prisma.user.findUnique({
-          where: { id: peerId },
-          select: { id: true, username: true, avatarUrl: true },
-        }),
-        prisma.message.findFirst({
-          where: {
-            OR: [
-              { senderId: userId, recipientId: peerId },
-              { senderId: peerId, recipientId: userId },
-            ],
-          },
-          orderBy: { createdAt: 'desc' },
-          select: { encryptedContent: true, createdAt: true, isRead: true, senderId: true },
-        }),
-      ]);
+  // Use raw SQL to get ranked peer IDs and the total distinct peer count
+  const peerQuery: any[] = await prisma.$queryRaw`
+    SELECT peer_id, MAX("createdAt") as "lastCreatedAt"
+    FROM (
+      SELECT "recipientId" as peer_id, "createdAt" FROM "Message" WHERE "senderId" = ${userId}
+      UNION ALL
+      SELECT "senderId" as peer_id, "createdAt" FROM "Message" WHERE "recipientId" = ${userId}
+    ) AS peers
+    GROUP BY peer_id
+    ORDER BY "lastCreatedAt" DESC
+    LIMIT ${limit} OFFSET ${skip}
+  `;
 
-      if (!user || !lastMessage) return null;
+  const totalQuery: any[] = await prisma.$queryRaw`
+    SELECT COUNT(DISTINCT peer_id) as count
+    FROM (
+      SELECT "recipientId" as peer_id FROM "Message" WHERE "senderId" = ${userId}
+      UNION ALL
+      SELECT "senderId" as peer_id FROM "Message" WHERE "recipientId" = ${userId}
+    ) AS peers
+  `;
 
-      return {
-        user,
-        lastMessage: {
-          encryptedContent: lastMessage.encryptedContent,
-          createdAt: lastMessage.createdAt,
-          isRead: lastMessage.isRead,
-          isMine: lastMessage.senderId === userId,
-        },
-      };
-    })
-  );
+  const total = Number(totalQuery[0]?.count || 0);
+  const pagedPeerIds = peerQuery.map((row) => row.peer_id);
 
-  // Filter nulls and sort by most recent message DESC
-  const conversations = conversationEntries
-    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-    .sort((a, b) => b.lastMessage.createdAt.getTime() - a.lastMessage.createdAt.getTime());
+  if (pagedPeerIds.length === 0) {
+    return {
+      conversations: [],
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  // Batch query to resolve N+1
+  const users = await prisma.user.findMany({
+    where: { id: { in: pagedPeerIds } },
+    select: { id: true, username: true, avatarUrl: true },
+  });
+
+  const lastMessages = await prisma.message.findMany({
+    where: {
+      OR: [
+        { senderId: userId, recipientId: { in: pagedPeerIds } },
+        { senderId: { in: pagedPeerIds }, recipientId: userId },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  // Extract the latest message for each peer (array is already ordered by createdAt DESC)
+  const conversations = pagedPeerIds.map((peerId) => {
+    const user = users.find((u) => u.id === peerId);
+    const lastMessage = lastMessages.find(
+      (m) =>
+        (m.senderId === userId && m.recipientId === peerId) ||
+        (m.senderId === peerId && m.recipientId === userId)
+    );
+
+    if (!user || !lastMessage) return null;
+
+    return {
+      user,
+      lastMessage: {
+        encryptedContent: lastMessage.encryptedContent,
+        createdAt: lastMessage.createdAt,
+        isRead: lastMessage.isRead,
+        isMine: lastMessage.senderId === userId,
+      },
+    };
+  }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
   return {
     conversations,

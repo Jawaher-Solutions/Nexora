@@ -11,6 +11,7 @@ import { env } from '../config/env';
 import { FLAG_THRESHOLD } from '../config/constants';
 import { prisma } from '../lib/prisma';
 import { r2 } from '../lib/r2';
+import { redis } from '../lib/redis';
 import { addModerationJob } from '../jobs/queues';
 import {
   ConflictError,
@@ -315,14 +316,6 @@ export async function flagVideo(userId: string, videoId: string, reason: string)
 }
 
 export async function dislikeVideo(userId: string, videoId: string) {
-  const video = await prisma.video.findUnique({
-    where: { id: videoId },
-    select: { id: true, status: true },
-  });
-  if (!video || video.status !== "APPROVED") {
-    throw new NotFoundError("Video");
-  }
-
   const updatedVideo = await prisma.$transaction(async (tx) => {
     const currentVideo = await tx.video.findUnique({ where: { id: videoId }, select: { status: true } });
     if (!currentVideo || currentVideo.status !== "APPROVED") {
@@ -347,7 +340,7 @@ export async function dislikeVideo(userId: string, videoId: string) {
 }
 
 export async function undislikeVideo(userId: string, videoId: string) {
-  await prisma.$transaction(async (tx) => {
+  const updatedDislikesCount = await prisma.$transaction(async (tx) => {
     const result = await tx.dislike.deleteMany({
       where: { userId, videoId },
     });
@@ -365,27 +358,25 @@ export async function undislikeVideo(userId: string, videoId: string) {
       throw new NotFoundError('Video');
     }
 
-    await tx.video.update({
+    const updated = await tx.video.update({
       where: { id: videoId },
       data: {
         dislikesCount: Math.max(current.dislikesCount - 1, 0),
       },
+      select: { dislikesCount: true },
     });
+
+    return updated.dislikesCount;
   });
 
-  const updated = await prisma.video.findUnique({
-    where: { id: videoId },
-    select: { dislikesCount: true },
-  });
-
-  return { disliked: false, dislikesCount: updated?.dislikesCount ?? 0 };
+  return { disliked: false, dislikesCount: updatedDislikesCount };
 }
 
-const shareRateLimits = new Set<string>();
-
 export async function shareVideo(userId: string, videoId: string) {
-  const rateLimitKey = `${userId}:${videoId}`;
-  if (shareRateLimits.has(rateLimitKey)) {
+  const rateLimitKey = `share:${userId}:${videoId}`;
+  const acquired = await redis.set(rateLimitKey, '1', 'PX', 60000, 'NX');
+  
+  if (!acquired) {
     throw new ConflictError("Rate limit exceeded for sharing this video");
   }
 
@@ -393,12 +384,11 @@ export async function shareVideo(userId: string, videoId: string) {
     where: { id: videoId },
     select: { id: true, status: true },
   });
+  
   if (!video || video.status !== "APPROVED") {
+    await redis.del(rateLimitKey);
     throw new NotFoundError("Video");
   }
-
-  shareRateLimits.add(rateLimitKey);
-  setTimeout(() => shareRateLimits.delete(rateLimitKey), 60000);
 
   const updatedVideo = await prisma.video.update({
     where: { id: videoId },

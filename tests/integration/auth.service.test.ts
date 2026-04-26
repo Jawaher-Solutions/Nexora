@@ -1,4 +1,5 @@
 import { prisma } from '../../src/lib/prisma';
+import { cleanAll } from '../helpers/db';
 import {
   loginUser,
   logoutUser,
@@ -9,8 +10,7 @@ import { ConflictError, UnauthorizedError } from '../../src/utils/errors';
 
 describe('auth.service integration', () => {
   beforeEach(async () => {
-    await prisma.refreshToken.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
   });
 
   describe('registerUser', () => {

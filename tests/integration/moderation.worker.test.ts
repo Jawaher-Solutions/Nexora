@@ -1,5 +1,5 @@
 import { prisma } from '../../src/lib/prisma';
-import { createTestUser, createTestVideo } from '../helpers/db';
+import { createTestUser, createTestVideo, cleanAll } from '../helpers/db';
 
 let capturedProcessor: undefined | ((job: { data: { videoId: string } }) => Promise<void>);
 
@@ -35,10 +35,7 @@ describe('moderation worker logic', () => {
   beforeEach(async () => {
     analyzeContentMock.mockReset();
 
-    await prisma.moderationLog.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.video.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
   });
 
   it('auto-approves video when maxScore < 40', async () => {

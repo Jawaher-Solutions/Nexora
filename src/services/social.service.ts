@@ -240,26 +240,7 @@ export async function deleteComment(commentId: string, userId: string, userRole:
     throw new ForbiddenError('You can only delete your own comments');
   }
 
-  // BFS to find all descendants
-  const allIds: string[] = [commentId];
-  let currentIds: string[] = [commentId];
-
-  while (currentIds.length > 0) {
-    const children = await prisma.comment.findMany({
-      where: { parentId: { in: currentIds } },
-      select: { id: true },
-    });
-    
-    if (children.length === 0) break;
-    
-    currentIds = children.map(c => c.id);
-    allIds.push(...currentIds);
-  }
-
-  // Atomically delete all descendants and the root
-  await prisma.$transaction([
-    prisma.comment.deleteMany({ where: { id: { in: allIds } } })
-  ]);
+  await prisma.comment.delete({ where: { id: commentId } });
 
   return { success: true };
 }

@@ -1,8 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { prisma } from '../../src/lib/prisma';
+import { redis } from '../../src/lib/redis';
 import * as videoService from '../../src/services/video.service';
-import { createTestUser, createTestVideo } from '../helpers/db';
+import { createTestUser, createTestVideo, cleanAll } from '../helpers/db';
 import {
   ConflictError,
   ForbiddenError,
@@ -32,15 +33,8 @@ describe('video.service integration', () => {
     sendMock.mockReset();
     addModerationJobMock.mockClear();
 
-    await prisma.moderationLog.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.flag.deleteMany();
-    await prisma.like.deleteMany();
-    await prisma.dislike.deleteMany();
-    await prisma.follow.deleteMany();
-    await prisma.video.deleteMany();
-    await prisma.refreshToken.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
+    await redis.flushdb();
   });
 
   describe('requestUpload', () => {
@@ -277,6 +271,23 @@ describe('video.service integration', () => {
       const result = await videoService.shareVideo(user.id, video.id);
       expect(result.shared).toBe(true);
       expect(result.sharesCount).toBe(1);
+    });
+
+    it('shareVideo on PENDING video throws NotFoundError', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'PENDING' });
+
+      await expect(videoService.shareVideo(user.id, video.id)).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('shareVideo twice within 60s throws ConflictError', async () => {
+      const user = await createTestUser();
+      const owner = await createTestUser();
+      const video = await createTestVideo(owner.id, { status: 'APPROVED', sharesCount: 0 });
+
+      await videoService.shareVideo(user.id, video.id);
+      await expect(videoService.shareVideo(user.id, video.id)).rejects.toBeInstanceOf(ConflictError);
     });
   });
 

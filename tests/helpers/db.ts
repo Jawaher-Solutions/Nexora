@@ -61,15 +61,22 @@ export async function createTestVideo(
 }
 
 export async function cleanAll() {
-  await prisma.moderationLog.deleteMany();
-  await prisma.notification.deleteMany();
-  await prisma.flag.deleteMany();
-  await prisma.like.deleteMany();
-  await prisma.dislike.deleteMany();
-  await prisma.comment.deleteMany();
-  await prisma.message.deleteMany();
-  await prisma.follow.deleteMany();
-  await prisma.video.deleteMany();
-  await prisma.refreshToken.deleteMany();
-  await prisma.user.deleteMany();
+  // Use TRUNCATE CASCADE to atomically clear all tables regardless of FK order.
+  // Sequential deleteMany calls are fragile: if one throws, subsequent tables
+  // (videos, users) remain and corrupt the next test's setup.
+  await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      "ModerationLog",
+      "Notification",
+      "Flag",
+      "Like",
+      "Dislike",
+      "Comment",
+      "Message",
+      "Follow",
+      "Video",
+      "RefreshToken",
+      "User"
+    RESTART IDENTITY CASCADE
+  `);
 }

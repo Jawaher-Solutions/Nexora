@@ -15,18 +15,10 @@ vi.mock('../../src/jobs/queues', () => ({
 import supertest from 'supertest';
 import { prisma } from '../../src/lib/prisma';
 import { buildApp } from '../../src/app';
-import { createTestUser, createTestVideo } from '../helpers/db';
+import { createTestUser, createTestVideo, cleanAll } from '../helpers/db';
 import { generateTestToken } from '../helpers/auth';
 
-// Prevent starting background workers during E2E.
-vi.mock('../../src/jobs', () => ({
-  startWorkers: () => {},
-}));
-vi.mock('../../src/jobs/moderation.worker', () => ({}));
-vi.mock('../../src/jobs/queues', () => ({
-  addModerationJob: vi.fn().mockResolvedValue(undefined),
-  moderationQueue: {},
-}));
+// Duplicated mocks removed
 
 describe('Admin routes E2E', () => {
   let app: any;
@@ -43,13 +35,7 @@ describe('Admin routes E2E', () => {
   });
 
   beforeEach(async () => {
-    await prisma.moderationLog.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.follow.deleteMany();
-    await prisma.message.deleteMany();
-    await prisma.video.deleteMany();
-    await prisma.refreshToken.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAll();
   });
 
   it('rejects unauthenticated requests to analytics', async () => {
@@ -166,16 +152,16 @@ describe('Admin routes E2E', () => {
     const owner = await createTestUser();
     const video = await createTestVideo(owner.id, { status: 'PENDING_REVIEW' });
     
-    // Create a log by reviewing
-    await prisma.moderationLog.create({
-      data: {
-        videoId: video.id,
-        moderatorId: mod.id,
-        decision: 'HUMAN_APPROVED',
-      }
-    });
-
     const token = generateTestToken(mod.id, mod.role);
+    
+    // Create a log by reviewing
+    const reviewRes = await request
+      .post(`/api/v1/admin/queue/${video.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ decision: 'approve' });
+    
+    expect(reviewRes.status).toBe(200);
+
     const res = await request
       .get(`/api/v1/admin/logs?decision=HUMAN_APPROVED`)
       .set('Authorization', `Bearer ${token}`);
