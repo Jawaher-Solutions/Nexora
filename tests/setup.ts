@@ -13,6 +13,20 @@ vi.mock('../src/lib/redis', () => {
     set: vi.fn(),
     del: vi.fn(),
     xadd: vi.fn(),
+    getMaxListeners: vi.fn().mockReturnValue(10),
+    setMaxListeners: vi.fn(),
+    emit: vi.fn(),
+    removeListener: vi.fn(),
+    addListener: vi.fn(),
+    once: vi.fn(),
+    off: vi.fn(),
+    listeners: vi.fn().mockReturnValue([]),
+    rawListeners: vi.fn().mockReturnValue([]),
+    listenerCount: vi.fn().mockReturnValue(0),
+    eventNames: vi.fn().mockReturnValue([]),
+    removeAllListeners: vi.fn(),
+    prependListener: vi.fn(),
+    prependOnceListener: vi.fn(),
   };
 
   const handler = {
@@ -36,6 +50,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
+    // Child tables first, then parents — strict FK-safe order
     await prisma.moderationLog.deleteMany();
     await prisma.notification.deleteMany();
     await prisma.flag.deleteMany();
@@ -43,8 +58,8 @@ afterAll(async () => {
     await prisma.comment.deleteMany();
     await prisma.message.deleteMany();
     await prisma.follow.deleteMany();
-    await prisma.refreshToken.deleteMany();
     await prisma.video.deleteMany();
+    await prisma.refreshToken.deleteMany();
     await prisma.user.deleteMany();
   } finally {
     await prisma.$disconnect();

@@ -1,109 +1,264 @@
+// services/social.service.ts
+// Social Layer: follows, comments, notifications.
+// RULE: No HTTP references. Throw AppError subclasses only. No .then() chains.
+
 import { prisma } from '../lib/prisma';
-import { NotFoundError, ConflictError, ForbiddenError, ValidationError } from '../utils/errors';
+import { Prisma } from '@prisma/client';
+import {
+  NotFoundError,
+  ForbiddenError,
+  ValidationError,
+  ConflictError,
+} from '../utils/errors';
 import { createNotification } from './notification.service';
+import { paginate as getPaginationParams } from '../utils/pagination';
+import type { AddCommentInput } from '../validators/social.validators';
+
+// ─── Follows ─────────────────────────────────────────────────────────────────
 
 export async function followUser(followerId: string, followeeId: string) {
   if (followerId === followeeId) {
-    throw new ValidationError('Users cannot follow themselves');
+    throw new ValidationError('You cannot follow yourself');
   }
 
+  // Check the followee exists and isn't banned
   const followee = await prisma.user.findUnique({ where: { id: followeeId } });
-  if (!followee) {
+  if (!followee || followee.isBanned) {
     throw new NotFoundError('User');
   }
 
+  // Check the follower isn't banned before allowing the action
+  const follower = await prisma.user.findUnique({
+    where: { id: followerId },
+    select: { username: true, isBanned: true },
+  });
+  if (!follower || follower.isBanned) {
+    throw new ForbiddenError('Banned users cannot follow others');
+  }
+
+  // Use try/catch on create to handle concurrent duplicates (P2002)
   try {
-    const follow = await prisma.follow.create({
-      data: { followerId, followeeId },
-    });
-
-    try {
-      await createNotification(
-        followeeId,
-        'FOLLOW',
-        'Someone started following you.',
-        followerId
-      );
-    } catch (notifErr) {
-      console.error('Failed to create notification for follow:', notifErr);
-    }
-
-    return follow;
-  } catch (err: any) {
-    if (err.code === 'P2002') {
+    await prisma.follow.create({ data: { followerId, followeeId } });
+  } catch (error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       throw new ConflictError('Already following this user');
     }
-    throw err;
+    throw error;
   }
+
+  await createNotification(
+    followeeId,
+    'FOLLOW',
+    `${follower.username} started following you`,
+    followerId
+  );
+
+  return { following: true };
 }
 
 export async function unfollowUser(followerId: string, followeeId: string) {
-  try {
-    await prisma.follow.delete({
-      where: { followerId_followeeId: { followerId, followeeId } },
-    });
-  } catch (err: any) {
-    if (err.code === 'P2025') {
-      throw new NotFoundError('Follow record');
-    }
-    throw err;
-  }
+  // Idempotent — no error if not following
+  await prisma.follow.deleteMany({ where: { followerId, followeeId } });
+  return { following: false };
 }
 
-export async function addComment(userId: string, videoId: string, content: string, parentId?: string) {
-  const video = await prisma.video.findUnique({ where: { id: videoId } });
-  if (!video) throw new NotFoundError('Video');
+export async function getFollowers(userId: string, page: number, limit: number) {
+  const { skip, take } = getPaginationParams(page, limit);
 
-  if (parentId) {
-    const parent = await prisma.comment.findUnique({ where: { id: parentId } });
-    if (!parent) throw new NotFoundError('Parent comment');
-    if (parent.videoId !== videoId) {
-      throw new ValidationError('Parent comment does not belong to the same video');
+  const [result, total] = await Promise.all([
+    prisma.follow.findMany({
+      where: { followeeId: userId },
+      include: {
+        follower: { select: { id: true, username: true, avatarUrl: true } },
+      },
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.follow.count({ where: { followeeId: userId } }),
+  ]);
+
+  return {
+    followers: result.map((f) => f.follower),
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+export async function getFollowing(userId: string, page: number, limit: number) {
+  const { skip, take } = getPaginationParams(page, limit);
+
+  const [result, total] = await Promise.all([
+    prisma.follow.findMany({
+      where: { followerId: userId },
+      include: {
+        followee: { select: { id: true, username: true, avatarUrl: true } },
+      },
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.follow.count({ where: { followerId: userId } }),
+  ]);
+
+  return {
+    following: result.map((f) => f.followee),
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+// ─── Comments ─────────────────────────────────────────────────────────────────
+
+export async function addComment(userId: string, input: AddCommentInput) {
+  const video = await prisma.video.findUnique({ where: { id: input.videoId } });
+  if (!video || video.status !== 'APPROVED') {
+    throw new NotFoundError('Video');
+  }
+
+  if (input.parentId) {
+    const parent = await prisma.comment.findUnique({ where: { id: input.parentId } });
+    if (!parent) {
+      throw new NotFoundError('Parent comment');
+    }
+    if (parent.videoId !== input.videoId) {
+      throw new ValidationError('Parent comment does not belong to this video');
     }
   }
 
   const comment = await prisma.comment.create({
-    data: { userId, videoId, content, parentId },
+    data: {
+      userId,
+      videoId: input.videoId,
+      content: input.content,
+      parentId: input.parentId ?? null,
+    },
+    include: {
+      user: { select: { id: true, username: true, avatarUrl: true } },
+    },
   });
 
   if (video.userId !== userId) {
-    try {
-      await createNotification(
-        video.userId,
-        'COMMENT',
-        'Someone commented on your video.',
-        comment.id
-      );
-    } catch (notifErr) {
-      console.error('Failed to create notification for comment:', notifErr);
-    }
+    const commenter = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { username: true },
+    });
+    await createNotification(
+      video.userId,
+      'COMMENT',
+      `${commenter!.username} commented on your video`,
+      video.id
+    );
   }
 
   return comment;
 }
 
-export async function deleteComment(commentId: string, userId: string, userRole: 'USER' | 'MODERATOR' | 'ADMIN') {
-  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
-  if (!comment) throw new NotFoundError('Comment');
+export async function getComments(videoId: string, page: number, limit: number) {
+  const { skip, take } = getPaginationParams(page, limit);
 
-  if (comment.userId !== userId && userRole === 'USER') {
-    throw new ForbiddenError('Not authorized to delete this comment');
-  }
-
-  await prisma.comment.delete({ where: { id: commentId } });
-}
-
-export async function getNotifications(userId: string, page = 1, take = 20) {
-  take = Math.min(take, 50); // enforce server-side cap
-  const skip = (page - 1) * take;
-  const [notifications, total] = await Promise.all([
-    prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
+  const [comments, total] = await Promise.all([
+    prisma.comment.findMany({
+      where: { videoId, parentId: null },
+      include: {
+        user: { select: { id: true, username: true, avatarUrl: true } },
+        _count: { select: { replies: true } },
+      },
       skip,
       take,
+      orderBy: { createdAt: 'desc' },
     }),
-    prisma.notification.count({ where: { userId } })
+    prisma.comment.count({ where: { videoId, parentId: null } }),
+  ]);
+
+  return {
+    comments,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+export async function getReplies(commentId: string, page: number, limit: number) {
+  const parent = await prisma.comment.findUnique({ where: { id: commentId } });
+  if (!parent) {
+    throw new NotFoundError('Comment');
+  }
+
+  const { skip, take } = getPaginationParams(page, limit);
+
+  const [replies, total] = await Promise.all([
+    prisma.comment.findMany({
+      where: { parentId: commentId },
+      include: {
+        user: { select: { id: true, username: true, avatarUrl: true } },
+      },
+      skip,
+      take,
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.comment.count({ where: { parentId: commentId } }),
+  ]);
+
+  return {
+    replies,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+export async function deleteComment(commentId: string, userId: string, userRole: string) {
+  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+  if (!comment) {
+    throw new NotFoundError('Comment');
+  }
+
+  if (
+    comment.userId !== userId &&
+    userRole !== 'ADMIN' &&
+    userRole !== 'MODERATOR'
+  ) {
+    throw new ForbiddenError('You can only delete your own comments');
+  }
+
+  // Atomically delete replies and parent to avoid orphaned records
+  await prisma.$transaction([
+    prisma.comment.deleteMany({ where: { parentId: commentId } }),
+    prisma.comment.delete({ where: { id: commentId } }),
+  ]);
+
+  return { success: true };
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export async function getNotifications(userId: string, page: number, limit: number) {
+  const { skip, take } = getPaginationParams(page, limit);
+
+  const [notifications, total, unreadCount] = await Promise.all([
+    prisma.notification.findMany({
+      where: { userId },
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.notification.count({ where: { userId } }),
+    prisma.notification.count({ where: { userId, isRead: false } }),
   ]);
 
   return {
@@ -111,8 +266,18 @@ export async function getNotifications(userId: string, page = 1, take = 20) {
     pagination: {
       total,
       page,
-      take,
-      totalPages: Math.ceil(total / take),
+      limit,
+      totalPages: Math.ceil(total / limit),
     },
+    unreadCount,
   };
+}
+
+export async function markNotificationsRead(userId: string) {
+  await prisma.notification.updateMany({
+    where: { userId, isRead: false },
+    data: { isRead: true },
+  });
+
+  return { success: true };
 }
